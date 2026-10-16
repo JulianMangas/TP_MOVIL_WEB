@@ -1,5 +1,21 @@
 ﻿@page "/"
+@inject AuthService Auth
 
-<h1>Hello, world!</h1>
+<h1>Sistema de Inventario</h1>
 
-Welcome to your new app.
+@if (Auth.EstaLogueado)
+{
+    <p>Hola, <strong>@Auth.Nombre</strong> (@Auth.Rol)</p>
+    <button class="btn btn-outline-secondary" @onclick="Salir">Cerrar sesión</button>
+}
+else
+{
+    <a href="login" class="btn btn-primary">Iniciar sesión</a>
+}
+
+@code {
+    private void Salir()
+    {
+        Auth.Logout();
+    }
+}

@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using SistemaInventario.App.Services;
 
 namespace SistemaInventario.App
 {
@@ -21,6 +22,10 @@ namespace SistemaInventario.App
     		builder.Logging.AddDebug();
 #endif
 
+            const string urlApi = "https://sistemainventario.runasp.net/";
+
+            builder.Services.AddSingleton(new HttpClient { BaseAddress = new Uri(urlApi) });
+            builder.Services.AddSingleton<AuthService>();
             return builder.Build();
         }
     }
