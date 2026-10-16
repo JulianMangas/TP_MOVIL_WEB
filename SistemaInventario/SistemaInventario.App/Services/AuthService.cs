@@ -1,10 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Net.Http.Headers;
+﻿using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text;
+using System.Text.Json;
 using SistemaInventario.App.Models;
 
 namespace SistemaInventario.App.Services;
@@ -12,6 +9,7 @@ namespace SistemaInventario.App.Services;
 public class AuthService
 {
     private readonly HttpClient _http;
+    private bool _sesionRestaurada;
 
     public AuthService(HttpClient http)
     {
@@ -24,6 +22,9 @@ public class AuthService
     public int UsuarioId { get; private set; }
 
     public bool EstaLogueado => !string.IsNullOrEmpty(Token);
+
+    // Se dispara cuando alguien inicia o cierra sesión
+    public event Action? SesionCambio;
 
     public async Task<(bool Exito, string? Error)> LoginAsync(string email, string password)
     {
@@ -46,21 +47,60 @@ public class AuthService
                 return (false, "Respuesta inválida del servidor.");
             }
 
-            Token = datos.Token;
-            Nombre = datos.Nombre;
-            Rol = datos.Rol;
-            UsuarioId = datos.UsuarioId;
+            EstablecerSesion(datos.Token, datos.Nombre, datos.Rol, datos.UsuarioId);
 
-            _http.DefaultRequestHeaders.Authorization =
-                new AuthenticationHeaderValue("Bearer", Token);
+            await SecureStorage.Default.SetAsync("token", datos.Token);
+            await SecureStorage.Default.SetAsync("nombre", datos.Nombre);
+            await SecureStorage.Default.SetAsync("rol", datos.Rol);
+            await SecureStorage.Default.SetAsync("usuarioId", datos.UsuarioId.ToString());
 
-            await SecureStorage.Default.SetAsync("token", Token);
+            SesionCambio?.Invoke();
 
             return (true, null);
         }
         catch (Exception)
         {
             return (false, "No se pudo conectar con el servidor. Revisá tu conexión.");
+        }
+    }
+
+    public async Task RestaurarSesionAsync()
+    {
+        if (_sesionRestaurada)
+        {
+            return;
+        }
+
+        _sesionRestaurada = true;
+
+        try
+        {
+            var token = await SecureStorage.Default.GetAsync("token");
+
+            if (string.IsNullOrEmpty(token))
+            {
+                return;
+            }
+
+            var expiracion = ObtenerExpiracion(token);
+
+            if (expiracion == null || expiracion <= DateTime.UtcNow)
+            {
+                SecureStorage.Default.RemoveAll();
+                return;
+            }
+
+            var nombre = await SecureStorage.Default.GetAsync("nombre");
+            var rol = await SecureStorage.Default.GetAsync("rol");
+            var idTexto = await SecureStorage.Default.GetAsync("usuarioId");
+
+            int.TryParse(idTexto, out var usuarioId);
+
+            EstablecerSesion(token, nombre ?? "", rol ?? "", usuarioId);
+        }
+        catch (Exception)
+        {
+            // Si el almacenamiento seguro falla, se arranca sin sesión
         }
     }
 
@@ -73,5 +113,49 @@ public class AuthService
 
         _http.DefaultRequestHeaders.Authorization = null;
         SecureStorage.Default.RemoveAll();
+
+        SesionCambio?.Invoke();
+    }
+
+    private void EstablecerSesion(string token, string nombre, string rol, int usuarioId)
+    {
+        Token = token;
+        Nombre = nombre;
+        Rol = rol;
+        UsuarioId = usuarioId;
+
+        _http.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", token);
+    }
+
+    // Lee el campo "exp" (expiración) del payload del JWT
+    private static DateTime? ObtenerExpiracion(string token)
+    {
+        try
+        {
+            var partes = token.Split('.');
+
+            if (partes.Length != 3)
+            {
+                return null;
+            }
+
+            var payload = partes[1].Replace('-', '+').Replace('_', '/');
+            payload = payload.PadRight(payload.Length + (4 - payload.Length % 4) % 4, '=');
+
+            var json = Encoding.UTF8.GetString(Convert.FromBase64String(payload));
+
+            using var documento = JsonDocument.Parse(json);
+
+            if (documento.RootElement.TryGetProperty("exp", out var exp))
+            {
+                return DateTimeOffset.FromUnixTimeSeconds(exp.GetInt64()).UtcDateTime;
+            }
+        }
+        catch (Exception)
+        {
+        }
+
+        return null;
     }
 }

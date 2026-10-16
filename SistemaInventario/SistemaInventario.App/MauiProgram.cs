@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 using SistemaInventario.App.Services;
+using Microsoft.AspNetCore.Components.Authorization;
 
 namespace SistemaInventario.App
 {
@@ -26,6 +27,8 @@ namespace SistemaInventario.App
 
             builder.Services.AddSingleton(new HttpClient { BaseAddress = new Uri(urlApi) });
             builder.Services.AddSingleton<AuthService>();
+            builder.Services.AddAuthorizationCore();
+            builder.Services.AddSingleton<AuthenticationStateProvider, SesionAuthStateProvider>();
             return builder.Build();
         }
     }
