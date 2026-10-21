@@ -24,6 +24,9 @@ namespace SistemaInventario.API.Models
 
         [MaxLength(250)]
         public string? Direccion { get; set; }
+        public int? UsuarioId { get; set; }
+
+        public Usuario? Usuario { get; set; }
 
         public ICollection<Venta> Ventas { get; set; } = new List<Venta>();
     }

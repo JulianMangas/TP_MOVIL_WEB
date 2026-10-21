@@ -3,6 +3,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using SistemaInventario.API.Data;
 using SistemaInventario.API.Models;
+using SistemaInventario.API.Middleware;
+using SistemaInventario.API.Services;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -78,13 +80,13 @@ builder.Services.AddDbContext<AppDbContext>(options =>
         builder.Configuration.GetConnectionString("DefaultConnection")
     )
 );
-
+builder.Services.AddScoped<IVentaService, VentaService>();
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
 
-
-    app.UseSwagger();
+app.UseMiddleware<ManejoErroresMiddleware>();
+app.UseSwagger();
     app.UseSwaggerUI();
 
 
@@ -116,7 +118,9 @@ using (var scope = app.Services.CreateScope())
 
     // --- Seed de datos iniciales ---
 
-    if (!db.Usuarios.Any(u => u.Rol == "Administrador"))
+    var admin = db.Usuarios.FirstOrDefault(u => u.Email == "admin@inventario.com");
+
+    if (admin == null)
     {
         db.Usuarios.Add(new Usuario
         {
@@ -125,6 +129,12 @@ using (var scope = app.Services.CreateScope())
             PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin123!"),
             Rol = "Administrador"
         });
+    }
+    else if (!(admin.PasswordHash.Length == 60 && admin.PasswordHash.StartsWith("$2")))
+    {
+        // El hash guardado no es BCrypt válido: se repara
+        admin.PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin123!");
+        admin.Rol = "Administrador";
     }
 
     if (!db.Categorias.Any())
@@ -145,9 +155,35 @@ using (var scope = app.Services.CreateScope())
             Direccion = "Calle Falsa 123"
         });
     }
+    if (!db.Usuarios.Any(u => u.Email == "cliente@inventario.com"))
+    {
+        db.Usuarios.Add(new Usuario
+        {
+            Nombre = "Cliente Prueba",
+            Email = "cliente@inventario.com",
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword("Cliente123!"),
+            Rol = "Usuario"
+        });
+    }
 
     db.SaveChanges();
+    // Todo usuario tiene que tener su cliente asociado
+    var usuariosSinCliente = db.Usuarios
+        .Where(u => !db.Clientes.Any(c => c.UsuarioId == u.Id))
+        .ToList();
 
+    foreach (var u in usuariosSinCliente)
+    {
+        db.Clientes.Add(new Cliente
+        {
+            Nombre = u.Nombre,
+            Apellido = "-",
+            Email = u.Email,
+            UsuarioId = u.Id
+        });
+    }
+
+    db.SaveChanges();
     if (!db.Productos.Any())
     {
         var categoria = db.Categorias.First();

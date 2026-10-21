@@ -9,7 +9,7 @@ namespace SistemaInventario.API.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize]
+    [Authorize(Roles = "Administrador")]
     public class ClientesController : ControllerBase
     {
         private readonly AppDbContext _context;
@@ -20,7 +20,7 @@ namespace SistemaInventario.API.Controllers
         }
 
         // GET: api/clientes
-        // Usuario y Administrador
+ 
         [HttpGet]
         public async Task<ActionResult<RespuestaPaginadaDto<Cliente>>> GetClientes(
             int page = 1,
@@ -69,7 +69,7 @@ namespace SistemaInventario.API.Controllers
         }
 
         // GET: api/clientes/5
-        // Usuario y Administrador
+      
         [HttpGet("{id}")]
         public async Task<ActionResult<Cliente>> GetCliente(int id)
         {
@@ -87,11 +87,14 @@ namespace SistemaInventario.API.Controllers
         }
 
         // POST: api/clientes
-        // Solo Administrador
+       
         [HttpPost]
-        [Authorize(Roles = "Administrador")]
+   
         public async Task<ActionResult<Cliente>> CrearCliente(Cliente cliente)
         {
+            cliente.Id = 0;
+            cliente.UsuarioId = null;
+            cliente.Usuario = null;
             _context.Clientes.Add(cliente);
             await _context.SaveChangesAsync();
 
@@ -103,9 +106,9 @@ namespace SistemaInventario.API.Controllers
         }
 
         // PUT: api/clientes/5
-        // Solo Administrador
+     
         [HttpPut("{id}")]
-        [Authorize(Roles = "Administrador")]
+  
         public async Task<IActionResult> ActualizarCliente(
             int id,
             Cliente cliente)
@@ -118,10 +121,9 @@ namespace SistemaInventario.API.Controllers
                 });
             }
 
-            var clienteExiste = await _context.Clientes
-                .AnyAsync(c => c.Id == id);
+            var existente = await _context.Clientes.FindAsync(id);
 
-            if (!clienteExiste)
+            if (existente == null)
             {
                 return NotFound(new
                 {
@@ -129,7 +131,11 @@ namespace SistemaInventario.API.Controllers
                 });
             }
 
-            _context.Entry(cliente).State = EntityState.Modified;
+            existente.Nombre = cliente.Nombre;
+            existente.Apellido = cliente.Apellido;
+            existente.Telefono = cliente.Telefono;
+            existente.Email = cliente.Email;
+            existente.Direccion = cliente.Direccion;
 
             await _context.SaveChangesAsync();
 
@@ -137,9 +143,9 @@ namespace SistemaInventario.API.Controllers
         }
 
         // DELETE: api/clientes/5
-        // Solo Administrador
+    
         [HttpDelete("{id}")]
-        [Authorize(Roles = "Administrador")]
+
         public async Task<IActionResult> EliminarCliente(int id)
         {
             var cliente = await _context.Clientes
@@ -161,7 +167,13 @@ namespace SistemaInventario.API.Controllers
                     mensaje = "No se puede eliminar el cliente porque tiene ventas asociadas."
                 });
             }
-
+            if (cliente.UsuarioId != null)
+            {
+                return BadRequest(new
+                {
+                    mensaje = "No se puede eliminar un cliente asociado a un usuario."
+                });
+            }
             _context.Clientes.Remove(cliente);
 
             await _context.SaveChangesAsync();

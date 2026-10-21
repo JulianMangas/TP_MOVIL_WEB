@@ -74,7 +74,14 @@ namespace SistemaInventario.API.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
+                    b.Property<int?>("UsuarioId")
+                        .HasColumnType("int");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("UsuarioId")
+                        .IsUnique()
+                        .HasFilter("[UsuarioId] IS NOT NULL");
 
                     b.ToTable("Clientes");
                 });
@@ -288,18 +295,28 @@ namespace SistemaInventario.API.Migrations
                     b.ToTable("Ventas");
                 });
 
+            modelBuilder.Entity("SistemaInventario.API.Models.Cliente", b =>
+                {
+                    b.HasOne("SistemaInventario.API.Models.Usuario", "Usuario")
+                        .WithOne("Cliente")
+                        .HasForeignKey("SistemaInventario.API.Models.Cliente", "UsuarioId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Usuario");
+                });
+
             modelBuilder.Entity("SistemaInventario.API.Models.DetalleIngreso", b =>
                 {
                     b.HasOne("SistemaInventario.API.Models.Ingreso", "Ingreso")
                         .WithMany("Detalles")
                         .HasForeignKey("IngresoId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.HasOne("SistemaInventario.API.Models.Producto", "Producto")
                         .WithMany("DetallesIngreso")
                         .HasForeignKey("ProductoId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Ingreso");
@@ -312,13 +329,13 @@ namespace SistemaInventario.API.Migrations
                     b.HasOne("SistemaInventario.API.Models.Producto", "Producto")
                         .WithMany("DetallesVenta")
                         .HasForeignKey("ProductoId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.HasOne("SistemaInventario.API.Models.Venta", "Venta")
                         .WithMany("Detalles")
                         .HasForeignKey("VentaId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Producto");
@@ -331,13 +348,13 @@ namespace SistemaInventario.API.Migrations
                     b.HasOne("SistemaInventario.API.Models.Proveedor", "Proveedor")
                         .WithMany("Ingresos")
                         .HasForeignKey("ProveedorId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.HasOne("SistemaInventario.API.Models.Usuario", "Usuario")
                         .WithMany("Ingresos")
                         .HasForeignKey("UsuarioId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Proveedor");
@@ -350,7 +367,7 @@ namespace SistemaInventario.API.Migrations
                     b.HasOne("SistemaInventario.API.Models.Categoria", "Categoria")
                         .WithMany("Productos")
                         .HasForeignKey("CategoriaId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Categoria");
@@ -361,13 +378,13 @@ namespace SistemaInventario.API.Migrations
                     b.HasOne("SistemaInventario.API.Models.Cliente", "Cliente")
                         .WithMany("Ventas")
                         .HasForeignKey("ClienteId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.HasOne("SistemaInventario.API.Models.Usuario", "Usuario")
                         .WithMany("Ventas")
                         .HasForeignKey("UsuarioId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Cliente");
@@ -404,6 +421,8 @@ namespace SistemaInventario.API.Migrations
 
             modelBuilder.Entity("SistemaInventario.API.Models.Usuario", b =>
                 {
+                    b.Navigation("Cliente");
+
                     b.Navigation("Ingresos");
 
                     b.Navigation("Ventas");

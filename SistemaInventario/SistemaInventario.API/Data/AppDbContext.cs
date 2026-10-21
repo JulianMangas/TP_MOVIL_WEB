@@ -27,5 +27,22 @@ namespace SistemaInventario.API.Data
         public DbSet<Venta> Ventas { get; set; }
 
         public DbSet<DetalleVenta> DetallesVenta { get; set; }
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            base.OnModelCreating(modelBuilder);
+
+            modelBuilder.Entity<Cliente>()
+                .HasOne(c => c.Usuario)
+                .WithOne(u => u.Cliente)
+                .HasForeignKey<Cliente>(c => c.UsuarioId);
+
+            // Ninguna eliminación borra datos en cascada
+            foreach (var fk in modelBuilder.Model.GetEntityTypes()
+                         .SelectMany(e => e.GetForeignKeys()))
+            {
+                fk.DeleteBehavior = DeleteBehavior.Restrict;
+            }
+        }
     }
 }
