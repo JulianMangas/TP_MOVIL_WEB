@@ -11,7 +11,7 @@ namespace SistemaInventario.API.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize]
+    [Authorize(Roles = "Administrador")]
     public class IngresosController : ControllerBase
     {
         private readonly AppDbContext _context;
@@ -175,6 +175,13 @@ namespace SistemaInventario.API.Controllers
             // 3. Procesar cada detalle
             foreach (var detalleDto in dto.Detalles)
             {
+                if (detalleDto.Cantidad <= 0)
+                {
+                    return BadRequest(new
+                    {
+                        mensaje = "La cantidad debe ser mayor a cero."
+                    });
+                }
                 var producto = await _context.Productos
                     .FirstOrDefaultAsync(p => p.Id == detalleDto.ProductoId);
 

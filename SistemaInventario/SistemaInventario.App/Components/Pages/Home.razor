@@ -1,0 +1,24 @@
+﻿@page "/"
+@attribute [Authorize]
+@inject AuthService Auth
+@inject NavigationManager Nav
+
+<h1>Sistema de Inventario</h1>
+
+<p>Hola, <strong>@Auth.Nombre</strong> (@Auth.Rol)</p>
+
+<AuthorizeView Roles="Administrador">
+    <div class="alert alert-info">
+        Esta sección la ve solo el Administrador.
+    </div>
+</AuthorizeView>
+
+<button class="btn btn-outline-secondary" @onclick="Salir">Cerrar sesión</button>
+
+@code {
+    private void Salir()
+    {
+        Auth.Logout();
+        Nav.NavigateTo("login");
+    }
+}

@@ -10,7 +10,7 @@ namespace SistemaInventario.API.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize]
+    [Authorize(Roles = "Administrador")]
     public class ProveedoresController : ControllerBase
     {
         private readonly AppDbContext _context;
@@ -21,7 +21,7 @@ namespace SistemaInventario.API.Controllers
         }
 
         // GET: api/proveedores
-        // Usuario y Administrador
+        
         [HttpGet]
         public async Task<ActionResult<RespuestaPaginadaDto<ProveedorDto>>> GetProveedores(
             int page = 1,
@@ -78,7 +78,7 @@ namespace SistemaInventario.API.Controllers
         }
 
         // GET: api/proveedores/5
-        // Usuario y Administrador
+      
         [HttpGet("{id}")]
         public async Task<ActionResult<ProveedorDto>> GetProveedor(int id)
         {
@@ -106,9 +106,9 @@ namespace SistemaInventario.API.Controllers
         }
 
         // POST: api/proveedores
-        // Solo Administrador
+
         [HttpPost]
-        [Authorize(Roles = "Administrador")]
+    
         public async Task<ActionResult<ProveedorDto>> CrearProveedor(
             CrearProveedorDto dto)
         {
@@ -140,9 +140,9 @@ namespace SistemaInventario.API.Controllers
         }
 
         // PUT: api/proveedores/5
-        // Solo Administrador
+     
         [HttpPut("{id}")]
-        [Authorize(Roles = "Administrador")]
+      
         public async Task<IActionResult> ActualizarProveedor(
             int id,
             ActualizarProveedorDto dto)
@@ -168,9 +168,9 @@ namespace SistemaInventario.API.Controllers
         }
 
         // DELETE: api/proveedores/5
-        // Solo Administrador
+   
         [HttpDelete("{id}")]
-        [Authorize(Roles = "Administrador")]
+
         public async Task<IActionResult> EliminarProveedor(int id)
         {
             var proveedor = await _context.Proveedores.FindAsync(id);

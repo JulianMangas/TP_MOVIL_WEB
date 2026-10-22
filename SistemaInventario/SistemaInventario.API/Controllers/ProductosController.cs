@@ -29,7 +29,9 @@ namespace SistemaInventario.API.Controllers
         [HttpGet]
         public async Task<ActionResult<RespuestaPaginadaDto<ProductoDto>>> GetProductos(
             int page = 1,
-            int pageSize = 10)
+            int pageSize = 10,
+            string? buscar = null,
+            int? categoriaId = null)
         {
             if (page < 1)
             {
@@ -50,6 +52,20 @@ namespace SistemaInventario.API.Controllers
             var query = _context.Productos
                 .Include(p => p.Categoria)
                 .AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(buscar))
+            {
+                var texto = buscar.Trim();
+
+                query = query.Where(p =>
+                    p.Nombre.Contains(texto) ||
+                    (p.Descripcion != null && p.Descripcion.Contains(texto)));
+            }
+
+            if (categoriaId.HasValue)
+            {
+                query = query.Where(p => p.CategoriaId == categoriaId.Value);
+            }
 
             var totalRegistros = await query.CountAsync();
 
@@ -270,6 +286,17 @@ namespace SistemaInventario.API.Controllers
             }
 
             var imagenUrl = producto.ImagenUrl;
+            var tieneMovimientos =
+    await _context.DetallesVenta.AnyAsync(d => d.ProductoId == id) ||
+    await _context.DetallesIngreso.AnyAsync(d => d.ProductoId == id);
+
+            if (tieneMovimientos)
+            {
+                return BadRequest(new
+                {
+                    mensaje = "No se puede eliminar el producto porque tiene ventas o ingresos asociados."
+                });
+            }
 
             _context.Productos.Remove(producto);
 

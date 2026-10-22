@@ -23,6 +23,8 @@ namespace SistemaInventario.API.Models
         [MaxLength(50)]
         public string Rol { get; set; } = "Usuario";
 
+        public Cliente? Cliente { get; set; }
+
         public ICollection<Ingreso> Ingresos { get; set; } = new List<Ingreso>();
 
         public ICollection<Venta> Ventas { get; set; } = new List<Venta>();

@@ -1,0 +1,50 @@
+﻿@page "/login"
+@inject AuthService Auth
+@inject NavigationManager Nav
+
+<h3>Iniciar sesión</h3>
+
+<div class="mb-3">
+    <label class="form-label">Email</label>
+    <input class="form-control" type="email" @bind="email" @bind:event="oninput" />
+</div>
+
+<div class="mb-3">
+    <label class="form-label">Contraseña</label>
+    <input class="form-control" type="password" @bind="password" @bind:event="oninput" />
+</div>
+
+@if (!string.IsNullOrEmpty(error))
+{
+    <div class="alert alert-danger">@error</div>
+}
+
+<button class="btn btn-primary" @onclick="IniciarSesion" disabled="@cargando">
+    @(cargando ? "Ingresando..." : "Ingresar")
+</button>
+
+@code {
+    private string email = "";
+    private string password = "";
+    private string? error;
+    private bool cargando;
+
+    private async Task IniciarSesion()
+    {
+        cargando = true;
+        error = null;
+
+        var (exito, mensaje) = await Auth.LoginAsync(email, password);
+
+        cargando = false;
+
+        if (exito)
+        {
+            Nav.NavigateTo("/");
+        }
+        else
+        {
+            error = mensaje;
+        }
+    }
+}

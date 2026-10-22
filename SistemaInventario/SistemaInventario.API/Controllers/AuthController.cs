@@ -44,12 +44,19 @@ namespace SistemaInventario.API.Controllers
                 Nombre = dto.Nombre,
                 Email = dto.Email,
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
-                Rol = "Usuario"
+                Rol = "Usuario",
+                Cliente = new Cliente
+                {
+                    Nombre = dto.Nombre,
+                    Apellido = dto.Apellido,
+                    Email = dto.Email
+                }
             };
 
             _context.Usuarios.Add(usuario);
 
             await _context.SaveChangesAsync();
+
 
             return Ok(new
             {
