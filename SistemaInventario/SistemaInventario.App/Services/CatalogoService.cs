@@ -43,6 +43,30 @@ public class CatalogoService
 
         return (respuesta?.Datos, error);
     }
+    // Recorre todas las páginas (50 por vez, el máximo de la API)
+    public async Task<(List<ProductoDto>? Datos, string? Error)> ObtenerTodosAsync()
+    {
+        var todos = new List<ProductoDto>();
+        var pagina = 1;
+        int totalPaginas;
+
+        do
+        {
+            var (respuesta, error) = await ObtenerProductosAsync(pagina, 50, null, null);
+
+            if (respuesta == null)
+            {
+                return (null, error);
+            }
+
+            todos.AddRange(respuesta.Datos);
+            totalPaginas = respuesta.TotalPaginas;
+            pagina++;
+        }
+        while (pagina <= totalPaginas);
+
+        return (todos, null);
+    }
 
     // La API devuelve rutas relativas (/uploads/productos/xxx.png)
     public string? UrlImagen(string? ruta)

@@ -31,6 +31,7 @@ namespace SistemaInventario.App
             builder.Services.AddSingleton<CatalogoService>();
             builder.Services.AddSingleton<CarritoService>();
             builder.Services.AddSingleton<CompraService>();
+            builder.Services.AddSingleton<EntradasService>();
             builder.Services.AddAuthorizationCore();
             builder.Services.AddSingleton<AuthenticationStateProvider, SesionAuthStateProvider>();
             return builder.Build();

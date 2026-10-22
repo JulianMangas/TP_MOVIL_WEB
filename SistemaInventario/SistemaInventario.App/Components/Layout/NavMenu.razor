@@ -30,7 +30,13 @@
                         }
                     </NavLink>
                 </div>
-
+                <AuthorizeView Roles="Administrador" Context="esAdmin">
+                    <div class="nav-item px-3">
+                        <NavLink class="nav-link" href="ingresos">
+                            Ingreso de mercadería
+                        </NavLink>
+                    </div>
+                </AuthorizeView>
                 <div class="nav-item px-3 pt-3 small text-white-50">
                     @Auth.Nombre (@Auth.Rol)
                 </div>
