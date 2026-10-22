@@ -2,6 +2,7 @@
 @attribute [Authorize]
 @using System.Globalization
 @inject CatalogoService Servicio
+@inject CarritoService Carro
 
 <h3 class="mb-3">Catálogo</h3>
 
@@ -75,6 +76,16 @@ else
                         {
                             <span class="badge bg-success align-self-start">Disponible</span>
                         }
+                        @if (Carro.CantidadEnCarrito(p.Id) > 0)
+                        {
+                            <small class="text-muted">@Carro.CantidadEnCarrito(p.Id) en el carrito</small>
+                        }
+
+                        <button class="btn btn-primary btn-sm mt-auto"
+                                disabled="@(p.Stock == 0 || Carro.CantidadEnCarrito(p.Id) >= p.Stock)"
+                                @onclick="() => Agregar(p)">
+                            Agregar al carrito
+                        </button>
                     </div>
                 </div>
             </div>
@@ -167,5 +178,9 @@ else
             pagina++;
             await CargarAsync();
         }
+    }
+    private void Agregar(ProductoDto producto)
+    {
+        Carro.Agregar(producto);
     }
 }
