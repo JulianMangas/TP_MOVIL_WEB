@@ -6,6 +6,7 @@ using SistemaInventario.API.DTOs.Auth;
 using SistemaInventario.API.Models;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using SistemaInventario.API.Services;
 using System.Text;
 
 namespace SistemaInventario.API.Controllers
@@ -16,13 +17,16 @@ namespace SistemaInventario.API.Controllers
     {
         private readonly AppDbContext _context;
         private readonly IConfiguration _configuration;
+        private readonly IAuditoriaService _auditoria;
 
         public AuthController(
             AppDbContext context,
-            IConfiguration configuration)
+            IConfiguration configuration,
+            IAuditoriaService auditoria)
         {
             _context = context;
             _configuration = configuration;
+            _auditoria = auditoria;
         }
 
         [HttpPost("registro")]
@@ -69,32 +73,45 @@ namespace SistemaInventario.API.Controllers
         }
 
         [HttpPost("login")]
-        public async Task<ActionResult<LoginRespuestaDto>> Login(
-            LoginDto dto)
+        public async Task<ActionResult<LoginRespuestaDto>> Login(LoginDto dto)
         {
             var usuario = await _context.Usuarios
                 .FirstOrDefaultAsync(u => u.Email == dto.Email);
 
             if (usuario == null)
             {
+                await _auditoria.RegistrarAsync("LOGIN_FALLIDO", "Usuario", null, null,
+                    $"Email inexistente: {dto.Email}");
+
                 return Unauthorized(new
                 {
                     mensaje = "Email o contraseña incorrectos."
                 });
             }
 
-            var passwordCorrecta = BCrypt.Net.BCrypt.Verify(
-                dto.Password,
-                usuario.PasswordHash
-            );
+            bool passwordCorrecta;
+
+            try
+            {
+                passwordCorrecta = BCrypt.Net.BCrypt.Verify(dto.Password, usuario.PasswordHash);
+            }
+            catch (BCrypt.Net.SaltParseException)
+            {
+                passwordCorrecta = false;
+            }
 
             if (!passwordCorrecta)
             {
+                await _auditoria.RegistrarAsync("LOGIN_FALLIDO", "Usuario", usuario.Id, null,
+                    "Contraseña incorrecta");
+
                 return Unauthorized(new
                 {
                     mensaje = "Email o contraseña incorrectos."
                 });
             }
+
+            await _auditoria.RegistrarAsync("LOGIN", "Usuario", usuario.Id, usuario.Id);
 
             var token = GenerarToken(usuario);
 

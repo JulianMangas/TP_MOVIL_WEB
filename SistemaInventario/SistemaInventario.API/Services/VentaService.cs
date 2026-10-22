@@ -11,10 +11,12 @@ namespace SistemaInventario.API.Services
     public class VentaService : IVentaService
     {
         private readonly AppDbContext _context;
+        private readonly IAuditoriaService _auditoria;
 
-        public VentaService(AppDbContext context)
+        public VentaService(AppDbContext context, IAuditoriaService auditoria)
         {
             _context = context;
+            _auditoria = auditoria;
         }
 
         // La proyección a DTO
@@ -126,7 +128,8 @@ namespace SistemaInventario.API.Services
             _context.Ventas.Add(venta);
 
             await _context.SaveChangesAsync();
-
+            await _auditoria.RegistrarAsync("CREAR", "Venta", venta.Id, usuarioId,
+            $"Venta de {venta.Detalles.Count} producto(s)");
             return await _context.Ventas
                 .Where(v => v.Id == venta.Id)
                 .Select(AVentaDto)

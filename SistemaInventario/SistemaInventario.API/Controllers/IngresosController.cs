@@ -1,11 +1,9 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using SistemaInventario.API.Data;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using SistemaInventario.API.DTOs.Ingreso;
 using SistemaInventario.API.DTOs.Paginacion;
-using SistemaInventario.API.Models;
+using SistemaInventario.API.Services;
 using System.Security.Claims;
-using Microsoft.AspNetCore.Authorization;
 
 namespace SistemaInventario.API.Controllers
 {
@@ -14,12 +12,15 @@ namespace SistemaInventario.API.Controllers
     [Authorize(Roles = "Administrador")]
     public class IngresosController : ControllerBase
     {
-        private readonly AppDbContext _context;
+        private readonly IIngresoService _ingresoService;
 
-        public IngresosController(AppDbContext context)
+        public IngresosController(IIngresoService ingresoService)
         {
-            _context = context;
+            _ingresoService = ingresoService;
         }
+
+        private int UsuarioActualId =>
+            int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
 
         // GET: api/ingresos
         [HttpGet]
@@ -43,52 +44,7 @@ namespace SistemaInventario.API.Controllers
                 });
             }
 
-            var query = _context.Ingresos
-                .Include(i => i.Proveedor)
-                .Include(i => i.Detalles)
-                    .ThenInclude(d => d.Producto)
-                .AsQueryable();
-
-            var totalRegistros = await query.CountAsync();
-
-            var totalPaginas = (int)Math.Ceiling(
-                totalRegistros / (double)pageSize
-            );
-
-            var ingresos = await query
-                .OrderBy(i => i.Id)
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
-                .Select(i => new IngresoDto
-                {
-                    Id = i.Id,
-                    Fecha = i.Fecha,
-                    ProveedorId = i.ProveedorId,
-                    ProveedorNombre = i.Proveedor != null
-                        ? i.Proveedor.Nombre
-                        : null,
-
-                    Detalles = i.Detalles.Select(d => new DetalleIngresoDto
-                    {
-                        Id = d.Id,
-                        ProductoId = d.ProductoId,
-                        ProductoNombre = d.Producto != null
-                            ? d.Producto.Nombre
-                            : null,
-                        Cantidad = d.Cantidad,
-                        PrecioCompra = d.PrecioCompra
-                    }).ToList()
-                })
-                .ToListAsync();
-
-            var respuesta = new RespuestaPaginadaDto<IngresoDto>
-            {
-                Pagina = page,
-                TamanoPagina = pageSize,
-                TotalRegistros = totalRegistros,
-                TotalPaginas = totalPaginas,
-                Datos = ingresos
-            };
+            var respuesta = await _ingresoService.ListarAsync(page, pageSize);
 
             return Ok(respuesta);
         }
@@ -97,32 +53,7 @@ namespace SistemaInventario.API.Controllers
         [HttpGet("{id}")]
         public async Task<ActionResult<IngresoDto>> GetIngreso(int id)
         {
-            var ingreso = await _context.Ingresos
-                .Include(i => i.Proveedor)
-                .Include(i => i.Detalles)
-                    .ThenInclude(d => d.Producto)
-                .Where(i => i.Id == id)
-                .Select(i => new IngresoDto
-                {
-                    Id = i.Id,
-                    Fecha = i.Fecha,
-                    ProveedorId = i.ProveedorId,
-                    ProveedorNombre = i.Proveedor != null
-                        ? i.Proveedor.Nombre
-                        : null,
-
-                    Detalles = i.Detalles.Select(d => new DetalleIngresoDto
-                    {
-                        Id = d.Id,
-                        ProductoId = d.ProductoId,
-                        ProductoNombre = d.Producto != null
-                            ? d.Producto.Nombre
-                            : null,
-                        Cantidad = d.Cantidad,
-                        PrecioCompra = d.PrecioCompra
-                    }).ToList()
-                })
-                .FirstOrDefaultAsync();
+            var ingreso = await _ingresoService.ObtenerAsync(id);
 
             if (ingreso == null)
             {
@@ -137,111 +68,11 @@ namespace SistemaInventario.API.Controllers
 
         // POST: api/ingresos
         [HttpPost]
-        public async Task<ActionResult<IngresoDto>> CrearIngreso(
-            CrearIngresoDto dto)
+        public async Task<ActionResult<IngresoDto>> CrearIngreso(CrearIngresoDto dto)
         {
-            // 1. Verificar proveedor
-            var proveedorExiste = await _context.Proveedores
-                .AnyAsync(p => p.Id == dto.ProveedorId);
+            var ingreso = await _ingresoService.CrearAsync(dto, UsuarioActualId);
 
-            if (!proveedorExiste)
-            {
-                return BadRequest(new
-                {
-                    mensaje = "El proveedor indicado no existe."
-                });
-            }
-
-            var usuarioIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
-
-            if (usuarioIdClaim == null)
-            {
-                return Unauthorized(new
-                {
-                    mensaje = "No se pudo identificar al usuario autenticado."
-                });
-            }
-
-            var usuarioId = int.Parse(usuarioIdClaim.Value);
-
-            // 2. Crear el ingreso
-            var ingreso = new Ingreso
-            {
-                ProveedorId = dto.ProveedorId,
-                UsuarioId = usuarioId,
-                Fecha = DateTime.Now
-            };
-
-            // 3. Procesar cada detalle
-            foreach (var detalleDto in dto.Detalles)
-            {
-                if (detalleDto.Cantidad <= 0)
-                {
-                    return BadRequest(new
-                    {
-                        mensaje = "La cantidad debe ser mayor a cero."
-                    });
-                }
-                var producto = await _context.Productos
-                    .FirstOrDefaultAsync(p => p.Id == detalleDto.ProductoId);
-
-                if (producto == null)
-                {
-                    return BadRequest(new
-                    {
-                        mensaje = $"El producto con ID {detalleDto.ProductoId} no existe."
-                    });
-                }
-
-                var detalle = new DetalleIngreso
-                {
-                    ProductoId = detalleDto.ProductoId,
-                    Cantidad = detalleDto.Cantidad,
-                    PrecioCompra = detalleDto.PrecioCompra
-                };
-
-                ingreso.Detalles.Add(detalle);
-
-                // Aumentar stock
-                producto.Stock += detalleDto.Cantidad;
-            }
-
-            _context.Ingresos.Add(ingreso);
-
-            await _context.SaveChangesAsync();
-
-            // 4. Obtener el ingreso creado con sus relaciones
-            var resultado = await _context.Ingresos
-                .Include(i => i.Proveedor)
-                .Include(i => i.Detalles)
-                    .ThenInclude(d => d.Producto)
-                .Where(i => i.Id == ingreso.Id)
-                .Select(i => new IngresoDto
-                {
-                    Id = i.Id,
-                    Fecha = i.Fecha,
-                    ProveedorId = i.ProveedorId,
-                    ProveedorNombre = i.Proveedor != null
-                        ? i.Proveedor.Nombre
-                        : null,
-
-                    Detalles = i.Detalles.Select(d => new DetalleIngresoDto
-                    {
-                        Id = d.Id,
-                        ProductoId = d.ProductoId,
-                        ProductoNombre = d.Producto != null
-                            ? d.Producto.Nombre
-                            : null,
-                        Cantidad = d.Cantidad,
-                        PrecioCompra = d.PrecioCompra
-                    }).ToList()
-                })
-                .FirstAsync();
-
-            return CreatedAtAction(
-                nameof(GetIngreso),
-                new { id = ingreso.Id },
-                resultado);
+            return CreatedAtAction(nameof(GetIngreso), new { id = ingreso.Id }, ingreso);
         }
     }
 }
