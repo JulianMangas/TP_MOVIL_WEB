@@ -15,11 +15,19 @@ public class ApiClient
         _auth = auth;
     }
 
-    public async Task<(T? Datos, string? Error)> GetAsync<T>(string url)
+    public Task<(T? Datos, string? Error)> GetAsync<T>(string url)
+        => EnviarAsync<T>(() => _http.GetAsync(url));
+
+    public Task<(TRespuesta? Datos, string? Error)> PostAsync<TCuerpo, TRespuesta>(
+        string url, TCuerpo cuerpo)
+        => EnviarAsync<TRespuesta>(() => _http.PostAsJsonAsync(url, cuerpo));
+
+    private async Task<(T? Datos, string? Error)> EnviarAsync<T>(
+        Func<Task<HttpResponseMessage>> envio)
     {
         try
         {
-            var respuesta = await _http.GetAsync(url);
+            var respuesta = await envio();
 
             if (respuesta.StatusCode == HttpStatusCode.Unauthorized)
             {

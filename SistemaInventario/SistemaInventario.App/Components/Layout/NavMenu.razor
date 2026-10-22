@@ -1,4 +1,6 @@
-﻿@inject AuthService Auth
+﻿@implements IDisposable
+@inject AuthService Auth
+@inject CarritoService Carro
 @inject NavigationManager Nav
 
 <div class="top-row ps-3 navbar navbar-dark">
@@ -19,6 +21,16 @@
                     </NavLink>
                 </div>
 
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="carrito">
+                        Carrito
+                        @if (Carro.CantidadTotal > 0)
+                        {
+                            <span class="badge bg-primary ms-1">@Carro.CantidadTotal</span>
+                        }
+                    </NavLink>
+                </div>
+
                 <div class="nav-item px-3 pt-3 small text-white-50">
                     @Auth.Nombre (@Auth.Rol)
                 </div>
@@ -34,9 +46,24 @@
 </div>
 
 @code {
+    protected override void OnInitialized()
+    {
+        Carro.Cambio += Actualizar;
+    }
+
+    private void Actualizar()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
     private void Salir()
     {
         Auth.Logout();
         Nav.NavigateTo("login");
+    }
+
+    public void Dispose()
+    {
+        Carro.Cambio -= Actualizar;
     }
 }

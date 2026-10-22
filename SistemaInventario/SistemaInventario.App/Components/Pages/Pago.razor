@@ -1,0 +1,183 @@
+﻿@page "/pago"
+@attribute [Authorize]
+@using System.Globalization
+@inject CarritoService Carro
+@inject CompraService Compra
+
+<h3 class="mb-3">Pago</h3>
+
+@if (comprobante != null)
+{
+    <div class="alert alert-success">
+        <h4 class="alert-heading">¡Compra realizada!</h4>
+        <p class="mb-0">
+            Venta N° @comprobante.Id · @comprobante.Fecha.ToString("dd/MM/yyyy HH:mm")
+        </p>
+    </div>
+
+    <ul class="list-group mb-3">
+        @foreach (var d in comprobante.Detalles)
+        {
+            <li class="list-group-item d-flex justify-content-between">
+                <span>@d.Cantidad × @d.ProductoNombre</span>
+                <span>$ @((d.Cantidad * d.PrecioVenta).ToString("N2", es))</span>
+            </li>
+        }
+        <li class="list-group-item d-flex justify-content-between fw-bold">
+            <span>Total</span>
+            <span>$ @comprobante.Total.ToString("N2", es)</span>
+        </li>
+    </ul>
+
+    <a href="" class="btn btn-primary">Volver al catálogo</a>
+}
+else if (Carro.Items.Count == 0)
+{
+    <p class="text-muted">No hay productos para pagar.</p>
+    <a href="" class="btn btn-primary">Ir al catálogo</a>
+}
+else
+{
+    <div class="alert alert-info small">
+        <strong>Pago simulado.</strong> Este formulario es solo una demostración:
+        no ingreses los datos de una tarjeta real. Podés usar 4242 4242 4242 4242,
+        vencimiento 12/30 y CVV 123.
+    </div>
+
+    <ul class="list-group mb-3">
+        @foreach (var item in Carro.Items)
+        {
+            <li class="list-group-item d-flex justify-content-between">
+                <span>@item.Cantidad × @item.Nombre</span>
+                <span>$ @item.Subtotal.ToString("N2", es)</span>
+            </li>
+        }
+        <li class="list-group-item d-flex justify-content-between fw-bold">
+            <span>Total</span>
+            <span>$ @Carro.Total.ToString("N2", es)</span>
+        </li>
+    </ul>
+
+    <div class="mb-2">
+        <label class="form-label">Titular</label>
+        <input class="form-control" autocomplete="off"
+               @bind="titular" @bind:event="oninput" />
+    </div>
+
+    <div class="mb-2">
+        <label class="form-label">Número de tarjeta</label>
+        <input class="form-control" inputmode="numeric" maxlength="19" autocomplete="off"
+               placeholder="4242 4242 4242 4242"
+               @bind="numeroTarjeta" @bind:event="oninput" />
+    </div>
+
+    <div class="row g-2 mb-3">
+        <div class="col-6">
+            <label class="form-label">Vencimiento</label>
+            <input class="form-control" maxlength="5" autocomplete="off" placeholder="MM/AA"
+                   @bind="vencimiento" @bind:event="oninput" />
+        </div>
+        <div class="col-6">
+            <label class="form-label">CVV</label>
+            <input class="form-control" type="password" inputmode="numeric" maxlength="3"
+                   autocomplete="off"
+                   @bind="cvv" @bind:event="oninput" />
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(error))
+    {
+        <div class="alert alert-danger">
+            @error
+            <div class="mt-2">
+                <a href="carrito" class="btn btn-sm btn-outline-danger">Volver al carrito</a>
+            </div>
+        </div>
+    }
+
+    <button class="btn btn-success w-100" @onclick="Pagar" disabled="@procesando">
+        @(procesando ? "Procesando pago..." : $"Pagar $ {Carro.Total.ToString("N2", es)}")
+    </button>
+}
+
+@code {
+    private static readonly CultureInfo es = new("es-AR");
+
+    private string titular = "";
+    private string numeroTarjeta = "";
+    private string vencimiento = "";
+    private string cvv = "";
+    private string? error;
+    private bool procesando;
+    private VentaDto? comprobante;
+
+    private string? Validar()
+    {
+        if (string.IsNullOrWhiteSpace(titular))
+        {
+            return "Ingresá el nombre del titular.";
+        }
+
+        var digitos = new string(numeroTarjeta.Where(char.IsDigit).ToArray());
+
+        if (digitos.Length != 16)
+        {
+            return "El número de tarjeta debe tener 16 dígitos.";
+        }
+
+        if (!DateTime.TryParseExact("01/" + vencimiento, "dd/MM/yy",
+                CultureInfo.InvariantCulture, DateTimeStyles.None, out var fecha))
+        {
+            return "El vencimiento debe tener el formato MM/AA.";
+        }
+
+        // La tarjeta vale hasta el último día del mes indicado
+        if (fecha.AddMonths(1) <= DateTime.Today)
+        {
+            return "La tarjeta está vencida.";
+        }
+
+        if (cvv.Length != 3 || !cvv.All(char.IsDigit))
+        {
+            return "El CVV debe tener 3 dígitos.";
+        }
+
+        return null;
+    }
+
+    private async Task Pagar()
+    {
+        if (procesando)
+        {
+            return;
+        }
+
+        error = Validar();
+
+        if (error != null)
+        {
+            return;
+        }
+
+        procesando = true;
+
+        // Simula la espera de una pasarela de pago
+        await Task.Delay(1500);
+
+        var (venta, mensaje) = await Compra.ConfirmarAsync();
+
+        procesando = false;
+
+        if (venta == null)
+        {
+            error = mensaje;
+            return;
+        }
+
+        titular = "";
+        numeroTarjeta = "";
+        vencimiento = "";
+        cvv = "";
+        comprobante = venta;
+    }
+}
