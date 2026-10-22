@@ -81,6 +81,8 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     )
 );
 builder.Services.AddScoped<IVentaService, VentaService>();
+builder.Services.AddScoped<IIngresoService, IngresoService>();
+builder.Services.AddScoped<IAuditoriaService, AuditoriaService>();
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
