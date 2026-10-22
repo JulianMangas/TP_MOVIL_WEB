@@ -108,15 +108,7 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-    try
-    {
-        db.Database.Migrate();
-    }
-    catch (Exception ex)
-    {
-        var rutaError = Path.Combine(app.Environment.WebRootPath, "migration-error.txt");
-        System.IO.File.WriteAllText(rutaError, ex.ToString());
-    }
+    db.Database.Migrate();
 
     // --- Seed de datos iniciales ---
 

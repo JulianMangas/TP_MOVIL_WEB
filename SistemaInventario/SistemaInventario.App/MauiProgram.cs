@@ -27,6 +27,8 @@ namespace SistemaInventario.App
 
             builder.Services.AddSingleton(new HttpClient { BaseAddress = new Uri(urlApi) });
             builder.Services.AddSingleton<AuthService>();
+            builder.Services.AddSingleton<ApiClient>();
+            builder.Services.AddSingleton<CatalogoService>();
             builder.Services.AddAuthorizationCore();
             builder.Services.AddSingleton<AuthenticationStateProvider, SesionAuthStateProvider>();
             return builder.Build();

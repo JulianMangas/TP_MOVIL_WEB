@@ -1,0 +1,171 @@
+﻿@page "/"
+@attribute [Authorize]
+@using System.Globalization
+@inject CatalogoService Servicio
+
+<h3 class="mb-3">Catálogo</h3>
+
+<div class="d-flex gap-2 mb-2">
+    <input class="form-control" placeholder="Buscar productos..."
+           @bind="buscar" @bind:event="oninput" @onkeydown="TeclaBuscar" />
+    <button class="btn btn-primary" @onclick="Buscar">Buscar</button>
+</div>
+
+<select class="form-select mb-3" @bind="categoriaSeleccionada" @bind:after="Buscar">
+    <option value="0">Todas las categorías</option>
+    @foreach (var c in categorias)
+    {
+        <option value="@c.Id">@c.Nombre</option>
+    }
+</select>
+
+@if (cargando)
+{
+    <p class="text-center text-muted my-4">Cargando...</p>
+}
+else if (error != null)
+{
+    <div class="alert alert-danger">
+        @error
+        <button class="btn btn-sm btn-outline-danger ms-2" @onclick="CargarAsync">Reintentar</button>
+    </div>
+}
+else if (productos.Count == 0)
+{
+    <p class="text-muted">No se encontraron productos.</p>
+}
+else
+{
+    <div class="row g-3">
+        @foreach (var p in productos)
+        {
+            var urlImagen = Servicio.UrlImagen(p.ImagenUrl);
+
+            <div class="col-6 col-md-4 col-lg-3">
+                <div class="card h-100 @(p.Stock == 0 ? "opacity-75" : "")">
+                    @if (urlImagen != null)
+                    {
+                        <img src="@urlImagen" class="card-img-top" alt="@p.Nombre"
+                             style="height:140px; object-fit:cover;" />
+                    }
+                    else
+                    {
+                        <div class="bg-light d-flex align-items-center justify-content-center text-muted"
+                             style="height:140px;">
+                            Sin imagen
+                        </div>
+                    }
+
+                    <div class="card-body d-flex flex-column gap-1">
+                        <h6 class="card-title mb-0">@p.Nombre</h6>
+                        <small class="text-muted">@p.CategoriaNombre</small>
+                        <div class="fs-5 fw-bold">$ @p.Precio.ToString("N2", es)</div>
+
+                        @if (p.Stock == 0)
+                        {
+                            <span class="badge bg-secondary align-self-start">Sin stock</span>
+                        }
+                        else if (p.Stock <= 5)
+                        {
+                            <span class="badge bg-warning text-dark align-self-start">
+                                Últimas @p.Stock unidades
+                            </span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-success align-self-start">Disponible</span>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center my-3">
+        <button class="btn btn-outline-secondary" @onclick="Anterior" disabled="@(pagina <= 1)">
+            Anterior
+        </button>
+        <span>Página @pagina de @totalPaginas</span>
+        <button class="btn btn-outline-secondary" @onclick="Siguiente" disabled="@(pagina >= totalPaginas)">
+            Siguiente
+        </button>
+    </div>
+}
+
+@code {
+    private static readonly CultureInfo es = new("es-AR");
+    private const int Tamano = 8;
+
+    private List<ProductoDto> productos = new();
+    private List<CategoriaDto> categorias = new();
+    private string buscar = "";
+    private int categoriaSeleccionada;
+    private int pagina = 1;
+    private int totalPaginas = 1;
+    private bool cargando = true;
+    private string? error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var (cats, _) = await Servicio.ObtenerCategoriasAsync();
+        categorias = cats ?? new();
+
+        await CargarAsync();
+    }
+
+    private async Task CargarAsync()
+    {
+        cargando = true;
+        error = null;
+
+        var (datos, mensaje) = await Servicio.ObtenerProductosAsync(
+            pagina,
+            Tamano,
+            buscar,
+            categoriaSeleccionada == 0 ? null : categoriaSeleccionada);
+
+        cargando = false;
+
+        if (datos == null)
+        {
+            error = mensaje;
+            productos = new();
+            return;
+        }
+
+        productos = datos.Datos;
+        totalPaginas = Math.Max(datos.TotalPaginas, 1);
+    }
+
+    private async Task Buscar()
+    {
+        pagina = 1;
+        await CargarAsync();
+    }
+
+    private async Task TeclaBuscar(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await Buscar();
+        }
+    }
+
+    private async Task Anterior()
+    {
+        if (pagina > 1)
+        {
+            pagina--;
+            await CargarAsync();
+        }
+    }
+
+    private async Task Siguiente()
+    {
+        if (pagina < totalPaginas)
+        {
+            pagina++;
+            await CargarAsync();
+        }
+    }
+}
