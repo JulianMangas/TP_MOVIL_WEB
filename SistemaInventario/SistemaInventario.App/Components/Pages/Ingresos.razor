@@ -1,0 +1,266 @@
+﻿@page "/ingresos"
+@attribute [Authorize(Roles = "Administrador")]
+@using System.Globalization
+@inject EntradasService Entradas
+@inject CatalogoService CatalogoServicio
+
+<h3 class="mb-3">Ingreso de mercadería</h3>
+
+@if (cargando)
+{
+    <p class="text-center text-muted my-4">Cargando...</p>
+}
+else if (errorCarga != null)
+{
+    <div class="alert alert-danger">
+        @errorCarga
+        <button class="btn btn-sm btn-outline-danger ms-2" @onclick="CargarAsync">Reintentar</button>
+    </div>
+}
+else
+{
+    <div>
+        @if (confirmacion != null)
+        {
+            <div class="alert alert-success">
+                Ingreso N° @confirmacion.Id registrado
+                (@confirmacion.ProveedorNombre, @confirmacion.Fecha.ToString("dd/MM/yyyy HH:mm")).
+                El stock ya está actualizado.
+            </div>
+        }
+
+        <div class="mb-3">
+            <label class="form-label">Proveedor</label>
+            <select class="form-select" @bind="proveedorId">
+                <option value="0">Elegí un proveedor</option>
+                @foreach (var p in proveedores)
+                {
+                    <option value="@p.Id">@p.Nombre</option>
+                }
+            </select>
+        </div>
+
+        <div class="card mb-3">
+            <div class="card-body">
+                <h6 class="card-title">Agregar producto</h6>
+
+                <select class="form-select mb-2" @bind="productoId">
+                    <option value="0">Elegí un producto</option>
+                    @foreach (var p in productos)
+                    {
+                        <option value="@p.Id">@p.Nombre (stock actual: @p.Stock)</option>
+                    }
+                </select>
+
+                <div class="row g-2 mb-2">
+                    <div class="col-6">
+                        <label class="form-label">Cantidad</label>
+                        <input type="number" class="form-control" min="1" step="1" @bind="cantidad" />
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Precio de compra</label>
+                        <input type="number" class="form-control" min="0.01" step="0.01"
+                               @bind="precioCompra" />
+                    </div>
+                </div>
+
+                @if (errorLinea != null)
+                {
+                    <div class="alert alert-warning py-2 small">@errorLinea</div>
+                }
+
+                <button class="btn btn-outline-primary w-100" @onclick="AgregarLinea">
+                    Agregar a la lista
+                </button>
+            </div>
+        </div>
+
+        @if (lineas.Count > 0)
+        {
+            <ul class="list-group mb-3">
+                @foreach (var l in lineas)
+                {
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <div>@l.Cantidad × @l.ProductoNombre</div>
+                            <small class="text-muted">$ @l.PrecioCompra.ToString("N2", es) c/u</small>
+                        </div>
+                        <div class="text-end">
+                            <div>$ @l.Subtotal.ToString("N2", es)</div>
+                            <button class="btn btn-link text-danger p-0"
+                                    @onclick="() => Quitar(l)">
+                                Quitar
+                            </button>
+                        </div>
+                    </li>
+                }
+                <li class="list-group-item d-flex justify-content-between fw-bold">
+                    <span>Total</span>
+                    <span>$ @lineas.Sum(l => l.Subtotal).ToString("N2", es)</span>
+                </li>
+            </ul>
+        }
+
+        @if (errorRegistro != null)
+        {
+            <div class="alert alert-danger">@errorRegistro</div>
+        }
+
+        <button class="btn btn-success w-100" @onclick="Registrar" disabled="@procesando">
+            @(procesando ? "Registrando..." : "Registrar ingreso")
+        </button>
+    </div>
+}
+
+@code {
+    private static readonly CultureInfo es = new("es-AR");
+
+    private List<ProveedorDto> proveedores = new();
+    private List<ProductoDto> productos = new();
+    private List<LineaIngreso> lineas = new();
+
+    private int proveedorId;
+    private int productoId;
+    private int? cantidad = 1;
+    private decimal? precioCompra;
+
+    private bool cargando = true;
+    private bool procesando;
+    private string? errorCarga;
+    private string? errorLinea;
+    private string? errorRegistro;
+    private IngresoDto? confirmacion;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarAsync();
+    }
+
+    private async Task CargarAsync()
+    {
+        cargando = true;
+        errorCarga = null;
+
+        var (provs, errorProv) = await Entradas.ObtenerProveedoresAsync();
+        var (prods, errorProd) = await CatalogoServicio.ObtenerTodosAsync();
+
+        cargando = false;
+
+        if (provs == null || prods == null)
+        {
+            errorCarga = errorProv ?? errorProd;
+            return;
+        }
+
+        proveedores = provs;
+        productos = prods;
+    }
+
+    private void AgregarLinea()
+    {
+        errorLinea = null;
+
+        if (productoId == 0)
+        {
+            errorLinea = "Elegí un producto.";
+            return;
+        }
+
+        if (cantidad == null || cantidad < 1)
+        {
+            errorLinea = "La cantidad debe ser al menos 1.";
+            return;
+        }
+
+        if (precioCompra == null || precioCompra <= 0)
+        {
+            errorLinea = "El precio de compra debe ser mayor a cero.";
+            return;
+        }
+
+        if (lineas.Any(l => l.ProductoId == productoId))
+        {
+            errorLinea = "Ese producto ya está en la lista. Quitalo si querés cambiarlo.";
+            return;
+        }
+
+        var producto = productos.First(p => p.Id == productoId);
+
+        lineas.Add(new LineaIngreso
+        {
+            ProductoId = producto.Id,
+            ProductoNombre = producto.Nombre,
+            Cantidad = cantidad.Value,
+            PrecioCompra = precioCompra.Value
+        });
+
+        productoId = 0;
+        cantidad = 1;
+        precioCompra = null;
+    }
+
+    private void Quitar(LineaIngreso linea)
+    {
+        lineas.Remove(linea);
+    }
+
+    private async Task Registrar()
+    {
+        if (procesando)
+        {
+            return;
+        }
+
+        errorRegistro = null;
+        confirmacion = null;
+
+        if (proveedorId == 0)
+        {
+            errorRegistro = "Elegí un proveedor.";
+            return;
+        }
+
+        if (lineas.Count == 0)
+        {
+            errorRegistro = "Agregá al menos un producto a la lista.";
+            return;
+        }
+
+        procesando = true;
+
+        var dto = new CrearIngresoDto
+        {
+            ProveedorId = proveedorId,
+            Detalles = lineas
+                .Select(l => new CrearDetalleIngresoDto
+                {
+                    ProductoId = l.ProductoId,
+                    Cantidad = l.Cantidad,
+                    PrecioCompra = l.PrecioCompra
+                })
+                .ToList()
+        };
+
+        var (ingreso, mensaje) = await Entradas.RegistrarAsync(dto);
+
+        procesando = false;
+
+        if (ingreso == null)
+        {
+            errorRegistro = mensaje;
+            return;
+        }
+
+        confirmacion = ingreso;
+        lineas.Clear();
+        proveedorId = 0;
+
+        // Se vuelven a pedir los productos para mostrar el stock actualizado
+        var (prods, _) = await CatalogoServicio.ObtenerTodosAsync();
+
+        if (prods != null)
+        {
+            productos = prods;
+        }
+    }
+}
