@@ -22,6 +22,30 @@ public class ApiClient
         string url, TCuerpo cuerpo)
         => EnviarAsync<TRespuesta>(() => _http.PostAsJsonAsync(url, cuerpo));
 
+    public async Task<(byte[]? Bytes, string? Error)> DescargarAsync(string url)
+    {
+        try
+        {
+            var respuesta = await _http.GetAsync(url);
+
+            if (respuesta.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                _auth.Logout();
+                return (null, "Tu sesión expiró. Iniciá sesión nuevamente.");
+            }
+
+            if (!respuesta.IsSuccessStatusCode)
+            {
+                return (null, await LeerErrorAsync(respuesta));
+            }
+
+            return (await respuesta.Content.ReadAsByteArrayAsync(), null);
+        }
+        catch (Exception)
+        {
+            return (null, "No se pudo conectar con el servidor. Revisá tu conexión.");
+        }
+    }
     private async Task<(T? Datos, string? Error)> EnviarAsync<T>(
         Func<Task<HttpResponseMessage>> envio)
     {
