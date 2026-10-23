@@ -1,0 +1,56 @@
+﻿@page "/reportes"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Roles = "Administrador")]
+@inject ReportesService ServicioReportes
+
+<h3>Reportes</h3>
+<p class="text-muted">Los PDF se guardan en la carpeta Descargas del celular.</p>
+
+@if (!string.IsNullOrEmpty(error))
+{
+    <div class="alert alert-danger">@error</div>
+}
+
+@if (!string.IsNullOrEmpty(mensaje))
+{
+    <div class="alert alert-success">@mensaje</div>
+}
+
+<div class="d-grid gap-3">
+    <button class="btn btn-primary btn-lg" disabled="@ocupado"
+            @onclick='() => Descargar("diario", "reporte-diario")'>
+        Reporte Diario
+    </button>
+
+    <button class="btn btn-secondary btn-lg" disabled="@ocupado"
+            @onclick='() => Descargar("auditoria", "auditoria")'>
+        Auditoría
+    </button>
+
+    <button class="btn btn-secondary btn-lg" disabled="@ocupado"
+            @onclick='() => Descargar("errores", "registro-errores")'>
+        Registro de Errores
+    </button>
+</div>
+
+@if (ocupado)
+{
+    <p class="mt-3">Generando PDF...</p>
+}
+
+@code {
+    private bool ocupado;
+    private string? mensaje;
+    private string? error;
+
+    private async Task Descargar(string ruta, string prefijo)
+    {
+        ocupado = true;
+        mensaje = null;
+        error = null;
+
+        (mensaje, error) = await ServicioReportes.DescargarAsync(ruta, prefijo);
+
+        ocupado = false;
+    }
+}

@@ -6,8 +6,10 @@ using SistemaInventario.API.Models;
 using SistemaInventario.API.Middleware;
 using SistemaInventario.API.Services;
 using System.Text;
+using QuestPDF.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
+QuestPDF.Settings.License = LicenseType.Community;
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("PoliticaCORS", policy =>
@@ -83,6 +85,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddScoped<IVentaService, VentaService>();
 builder.Services.AddScoped<IIngresoService, IngresoService>();
 builder.Services.AddScoped<IAuditoriaService, AuditoriaService>();
+builder.Services.AddScoped<IReporteService, ReporteService>();
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
