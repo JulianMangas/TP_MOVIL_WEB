@@ -1,0 +1,361 @@
+﻿@page "/ingresos"
+@attribute [Authorize(Roles = "Administrador")]
+@using System.Globalization
+@inject HttpClient Http
+@inject AuthProvider Auth
+@inject NavigationManager Nav
+
+<PageTitle>Ingreso de mercadería</PageTitle>
+
+<h1 class="h3 mb-3">Ingreso de mercadería</h1>
+
+@if (mensajeOk != null)
+{
+    <div class="alert alert-success">@mensajeOk</div>
+}
+
+@if (error != null)
+{
+    <div class="alert alert-danger">@error</div>
+}
+
+<div class="row">
+    <div class="col-lg-6 mb-4">
+        <div class="card">
+            <div class="card-header"><strong>Nuevo ingreso</strong></div>
+            <div class="card-body">
+
+                <div class="mb-3">
+                    <label class="form-label">Proveedor</label>
+                    <select class="form-select" @bind="proveedorId">
+                        <option value="0">-- Elegí un proveedor --</option>
+                        @foreach (var p in proveedores)
+                        {
+                            <option value="@p.Id">@p.Nombre</option>
+                        }
+                    </select>
+                </div>
+
+                <hr />
+
+                <div class="input-group mb-2">
+                    <input class="form-control" placeholder="Buscar producto..."
+                           @bind="busquedaProducto" @bind:event="oninput"
+                           @onkeydown="TeclaBuscar" />
+                    <button class="btn btn-outline-secondary" @onclick="CargarProductosAsync">Buscar</button>
+                </div>
+
+                <div class="mb-2">
+                    <label class="form-label">Producto</label>
+                    <select class="form-select" @bind="productoId">
+                        <option value="0">-- Elegí un producto --</option>
+                        @foreach (var p in productos)
+                        {
+                            <option value="@p.Id">@p.Nombre (stock: @p.Stock)</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="row">
+                    <div class="col-6 mb-2">
+                        <label class="form-label">Cantidad</label>
+                        <input type="number" min="1" class="form-control" @bind="cantidad" />
+                    </div>
+                    <div class="col-6 mb-2">
+                        <label class="form-label">Costo unitario ($)</label>
+                        <input type="number" min="0" step="0.01" class="form-control" @bind="precioCompra" />
+                    </div>
+                </div>
+
+                @if (errorLinea != null)
+                {
+                    <div class="text-danger small mb-2">@errorLinea</div>
+                }
+
+                <button class="btn btn-primary w-100" @onclick="AgregarLinea">Agregar al ingreso</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6 mb-4">
+        <div class="card">
+            <div class="card-header"><strong>Detalle del ingreso</strong></div>
+            <div class="card-body">
+                @if (lineas.Count == 0)
+                {
+                    <p class="text-muted mb-0">Todavía no agregaste productos.</p>
+                }
+                else
+                {
+                    <table class="table table-sm align-middle">
+                        <thead>
+                            <tr>
+                                <th>Producto</th>
+                                <th class="text-end">Cant.</th>
+                                <th class="text-end">Costo</th>
+                                <th class="text-end">Subtotal</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var l in lineas)
+                            {
+                                <tr>
+                                    <td>@l.ProductoNombre</td>
+                                    <td class="text-end">@l.Cantidad</td>
+                                    <td class="text-end">@Dinero(l.PrecioCompra)</td>
+                                    <td class="text-end">@Dinero(l.Cantidad * l.PrecioCompra)</td>
+                                    <td>
+                                        <button class="btn btn-outline-danger btn-sm"
+                                                @onclick="() => lineas.Remove(l)">✕</button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+
+                    <p class="fs-5 text-end">Total: <strong>$ @Dinero(Total)</strong></p>
+
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-success" disabled="@confirmando" @onclick="ConfirmarAsync">
+                            @(confirmando ? "Registrando..." : "Confirmar ingreso")
+                        </button>
+                        <button class="btn btn-outline-secondary btn-sm" @onclick="() => lineas.Clear()">
+                            Vaciar
+                        </button>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+<h2 class="h5 mt-2">Últimos ingresos</h2>
+
+@if (recientes.Count == 0)
+{
+    <p class="text-muted">No hay ingresos registrados.</p>
+}
+else
+{
+    <table class="table table-sm">
+        <thead>
+            <tr>
+                <th>N°</th>
+                <th>Fecha</th>
+                <th>Proveedor</th>
+                <th class="text-end">Unidades</th>
+                <th class="text-end">Total</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var i in recientes)
+            {
+                <tr>
+                    <td>@i.Id</td>
+                    <td>@i.Fecha.ToString("dd/MM/yyyy HH:mm")</td>
+                    <td>@i.ProveedorNombre</td>
+                    <td class="text-end">@i.Detalles.Sum(d => d.Cantidad)</td>
+                    <td class="text-end">$ @Dinero(i.Detalles.Sum(d => d.Cantidad * d.PrecioCompra))</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private static readonly CultureInfo Es = new("es-AR");
+
+    private class Linea
+    {
+        public int ProductoId { get; set; }
+        public string ProductoNombre { get; set; } = "";
+        public int Cantidad { get; set; }
+        public decimal PrecioCompra { get; set; }
+    }
+
+    private List<ProveedorDto> proveedores = new();
+    private List<ProductoDto> productos = new();
+    private List<IngresoRespuesta> recientes = new();
+    private List<Linea> lineas = new();
+
+    private int proveedorId;
+    private int productoId;
+    private int cantidad = 1;
+    private decimal precioCompra;
+    private string busquedaProducto = "";
+
+    private string? error;
+    private string? errorLinea;
+    private string? mensajeOk;
+    private bool confirmando;
+
+    private decimal Total => lineas.Sum(l => l.Cantidad * l.PrecioCompra);
+    private string Dinero(decimal v) => v.ToString("N2", Es);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarProveedoresAsync();
+        await CargarProductosAsync();
+        await CargarRecientesAsync();
+    }
+
+    private async Task TeclaBuscar(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await CargarProductosAsync();
+    }
+
+    private async Task CargarProveedoresAsync()
+    {
+        var datos = await LeerPaginaAsync<ProveedorDto>("api/Proveedores?page=1&pageSize=50");
+        if (datos != null) proveedores = datos;
+    }
+
+    private async Task CargarProductosAsync()
+    {
+        var url = "api/Productos?page=1&pageSize=50";
+        if (!string.IsNullOrWhiteSpace(busquedaProducto))
+            url += "&buscar=" + Uri.EscapeDataString(busquedaProducto.Trim());
+
+        var datos = await LeerPaginaAsync<ProductoDto>(url);
+        if (datos != null) productos = datos;
+    }
+
+    private async Task CargarRecientesAsync()
+    {
+        var datos = await LeerPaginaAsync<IngresoRespuesta>("api/Ingresos?page=1&pageSize=10");
+        if (datos != null) recientes = datos.OrderByDescending(i => i.Id).ToList();
+    }
+
+    private async Task<List<T>?> LeerPaginaAsync<T>(string url)
+    {
+        try
+        {
+            var r = await Http.GetAsync(url);
+
+            if (await SesionVencidaAsync(r)) return null;
+
+            if (r.IsSuccessStatusCode)
+            {
+                var p = await r.Content.ReadFromJsonAsync<RespuestaPaginada<T>>();
+                return p?.Datos ?? new();
+            }
+
+            error = await LeerErrorAsync(r);
+        }
+        catch (HttpRequestException)
+        {
+            error = "No se pudo conectar con el servidor.";
+        }
+
+        return null;
+    }
+
+    private void AgregarLinea()
+    {
+        errorLinea = null;
+
+        var producto = productos.FirstOrDefault(p => p.Id == productoId);
+
+        if (producto == null) { errorLinea = "Elegí un producto."; return; }
+        if (cantidad < 1) { errorLinea = "La cantidad debe ser 1 o más."; return; }
+        if (precioCompra <= 0) { errorLinea = "El costo debe ser mayor a 0."; return; }
+
+        lineas.Add(new Linea
+        {
+            ProductoId = producto.Id,
+            ProductoNombre = producto.Nombre,
+            Cantidad = cantidad,
+            PrecioCompra = precioCompra
+        });
+
+        productoId = 0;
+        cantidad = 1;
+        precioCompra = 0;
+    }
+
+    private async Task ConfirmarAsync()
+    {
+        error = null;
+        mensajeOk = null;
+
+        if (proveedorId == 0)
+        {
+            error = "Elegí un proveedor antes de confirmar.";
+            return;
+        }
+
+        if (lineas.Count == 0) return;
+
+        confirmando = true;
+
+        try
+        {
+            var pedido = new CrearIngresoRequest
+            {
+                ProveedorId = proveedorId,
+                Detalles = lineas.Select(l => new DetalleIngresoRequest
+                {
+                    ProductoId = l.ProductoId,
+                    Cantidad = l.Cantidad,
+                    PrecioCompra = l.PrecioCompra
+                }).ToList()
+            };
+
+            var r = await Http.PostAsJsonAsync("api/Ingresos", pedido);
+
+            if (await SesionVencidaAsync(r)) return;
+
+            if (r.IsSuccessStatusCode)
+            {
+                var creado = await r.Content.ReadFromJsonAsync<IngresoRespuesta>();
+                mensajeOk = $"Ingreso #{creado?.Id} registrado. El stock fue actualizado.";
+                lineas.Clear();
+                proveedorId = 0;
+                await CargarProductosAsync();
+                await CargarRecientesAsync();
+            }
+            else
+            {
+                error = await LeerErrorAsync(r);
+            }
+        }
+        catch (HttpRequestException)
+        {
+            error = "No se pudo conectar con el servidor.";
+        }
+        finally
+        {
+            confirmando = false;
+        }
+    }
+
+    private async Task<bool> SesionVencidaAsync(HttpResponseMessage r)
+    {
+        if (r.StatusCode != System.Net.HttpStatusCode.Unauthorized) return false;
+
+        await Auth.CerrarSesionAsync();
+        Nav.NavigateTo("login");
+        return true;
+    }
+
+    private static async Task<string> LeerErrorAsync(HttpResponseMessage r)
+    {
+        try
+        {
+            var e = await r.Content.ReadFromJsonAsync<ErrorApi>();
+            if (!string.IsNullOrWhiteSpace(e?.Mensaje)) return e.Mensaje;
+        }
+        catch
+        {
+            // la respuesta no tenía el formato esperado
+        }
+
+        return r.StatusCode switch
+        {
+            System.Net.HttpStatusCode.Forbidden => "No tenés permiso para realizar esta acción.",
+            System.Net.HttpStatusCode.BadRequest => "Los datos enviados no son válidos.",
+            _ => "Ocurrió un error inesperado."
+        };
+    }
+}

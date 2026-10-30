@@ -1,11 +1,13 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 17
-VisualStudioVersion = 17.14.37531.7
+# Visual Studio Version 18
+VisualStudioVersion = 18.10.12224.181 stable
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SistemaInventario.API", "SistemaInventario.API\SistemaInventario.API.csproj", "{F86601AB-7D62-4A5B-8035-80369ECE9D6E}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SistemaInventario.App", "SistemaInventario.App\SistemaInventario.App.csproj", "{CCA071F8-0E05-433B-9CF0-9A21CD3A7245}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SistemaInventario.Web", "SistemaInventario.Web\SistemaInventario.Web.csproj", "{019E2546-46D9-480C-88FE-3DDCC4ECE0EB}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -23,6 +25,10 @@ Global
 		{CCA071F8-0E05-433B-9CF0-9A21CD3A7245}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{CCA071F8-0E05-433B-9CF0-9A21CD3A7245}.Release|Any CPU.Build.0 = Release|Any CPU
 		{CCA071F8-0E05-433B-9CF0-9A21CD3A7245}.Release|Any CPU.Deploy.0 = Release|Any CPU
+		{019E2546-46D9-480C-88FE-3DDCC4ECE0EB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{019E2546-46D9-480C-88FE-3DDCC4ECE0EB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{019E2546-46D9-480C-88FE-3DDCC4ECE0EB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{019E2546-46D9-480C-88FE-3DDCC4ECE0EB}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

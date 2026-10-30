@@ -4,12 +4,13 @@ using SistemaInventario.API.DTOs.Paginacion;
 using SistemaInventario.API.DTOs.Venta;
 using SistemaInventario.API.Services;
 using System.Security.Claims;
+using SistemaInventario.API.Models;
 
 namespace SistemaInventario.API.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize]
+    [Authorize(Roles = Roles.CajeroOAdmin)]
     public class VentasController : ControllerBase
     {
         private readonly IVentaService _ventaService;

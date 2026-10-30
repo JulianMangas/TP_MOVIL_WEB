@@ -1,15 +1,17 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using System.Linq.Expressions;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SistemaInventario.API.Data;
+using SistemaInventario.API.DTOs.Cliente;
 using SistemaInventario.API.DTOs.Paginacion;
 using SistemaInventario.API.Models;
-using Microsoft.AspNetCore.Authorization;
 
 namespace SistemaInventario.API.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize(Roles = "Administrador")]
+    [Authorize(Roles = Roles.CajeroOAdmin)]
     public class ClientesController : ControllerBase
     {
         private readonly AppDbContext _context;
@@ -19,165 +21,145 @@ namespace SistemaInventario.API.Controllers
             _context = context;
         }
 
-        // GET: api/clientes
- 
+        private static readonly Expression<Func<Cliente, ClienteDto>> ADto = c => new ClienteDto
+        {
+            Id = c.Id,
+            Nombre = c.Nombre,
+            Apellido = c.Apellido,
+            Telefono = c.Telefono,
+            Email = c.Email,
+            Direccion = c.Direccion
+        };
+
+        private static bool EsConsumidorFinal(Cliente c) =>
+            c.UsuarioId == null &&
+            c.Nombre == ConsumidorFinal.Nombre &&
+            c.Apellido == ConsumidorFinal.Apellido;
+
+        // GET: api/clientes?buscar=perez
         [HttpGet]
-        public async Task<ActionResult<RespuestaPaginadaDto<Cliente>>> GetClientes(
-            int page = 1,
-            int pageSize = 10)
+        public async Task<ActionResult<RespuestaPaginadaDto<ClienteDto>>> GetClientes(
+            int page = 1, int pageSize = 10, string? buscar = null)
         {
             if (page < 1)
-            {
-                return BadRequest(new
-                {
-                    mensaje = "El número de página debe ser mayor o igual a 1."
-                });
-            }
+                return BadRequest(new { mensaje = "El número de página debe ser mayor o igual a 1." });
 
             if (pageSize < 1 || pageSize > 50)
-            {
-                return BadRequest(new
-                {
-                    mensaje = "El tamaño de página debe estar entre 1 y 50."
-                });
-            }
+                return BadRequest(new { mensaje = "El tamaño de página debe estar entre 1 y 50." });
 
             var query = _context.Clientes.AsQueryable();
 
-            var totalRegistros = await query.CountAsync();
+            if (!string.IsNullOrWhiteSpace(buscar))
+            {
+                var t = buscar.Trim();
+                query = query.Where(c =>
+                    c.Nombre.Contains(t) ||
+                    c.Apellido.Contains(t) ||
+                    (c.Email != null && c.Email.Contains(t)));
+            }
 
-            var totalPaginas = (int)Math.Ceiling(
-                totalRegistros / (double)pageSize
-            );
+            var total = await query.CountAsync();
 
-            var clientes = await query
-                .OrderBy(c => c.Id)
+            var datos = await query
+                .OrderBy(c => c.Apellido).ThenBy(c => c.Nombre)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
+                .Select(ADto)
                 .ToListAsync();
 
-            var respuesta = new RespuestaPaginadaDto<Cliente>
+            return Ok(new RespuestaPaginadaDto<ClienteDto>
             {
                 Pagina = page,
                 TamanoPagina = pageSize,
-                TotalRegistros = totalRegistros,
-                TotalPaginas = totalPaginas,
-                Datos = clientes
-            };
-
-            return Ok(respuesta);
+                TotalRegistros = total,
+                TotalPaginas = (int)Math.Ceiling(total / (double)pageSize),
+                Datos = datos
+            });
         }
 
         // GET: api/clientes/5
-      
         [HttpGet("{id}")]
-        public async Task<ActionResult<Cliente>> GetCliente(int id)
+        public async Task<ActionResult<ClienteDto>> GetCliente(int id)
         {
-            var cliente = await _context.Clientes.FindAsync(id);
+            var cliente = await _context.Clientes
+                .Where(c => c.Id == id)
+                .Select(ADto)
+                .FirstOrDefaultAsync();
 
             if (cliente == null)
-            {
-                return NotFound(new
-                {
-                    mensaje = "El cliente no existe."
-                });
-            }
+                return NotFound(new { mensaje = "El cliente no existe." });
 
             return Ok(cliente);
         }
 
-        // POST: api/clientes
-       
+        // POST: api/clientes  (Cajero y Administrador)
         [HttpPost]
-   
-        public async Task<ActionResult<Cliente>> CrearCliente(Cliente cliente)
+        public async Task<ActionResult<ClienteDto>> CrearCliente(CrearClienteDto dto)
         {
-            cliente.Id = 0;
-            cliente.UsuarioId = null;
-            cliente.Usuario = null;
+            var cliente = new Cliente
+            {
+                Nombre = dto.Nombre,
+                Apellido = dto.Apellido,
+                Telefono = dto.Telefono,
+                Email = dto.Email,
+                Direccion = dto.Direccion
+            };
+
             _context.Clientes.Add(cliente);
             await _context.SaveChangesAsync();
 
-            return CreatedAtAction(
-                nameof(GetCliente),
-                new { id = cliente.Id },
-                cliente
-            );
+            var resultado = await _context.Clientes
+                .Where(c => c.Id == cliente.Id)
+                .Select(ADto)
+                .FirstAsync();
+
+            return CreatedAtAction(nameof(GetCliente), new { id = cliente.Id }, resultado);
         }
 
-        // PUT: api/clientes/5
-     
+        // PUT: api/clientes/5  (solo Administrador)
         [HttpPut("{id}")]
-  
-        public async Task<IActionResult> ActualizarCliente(
-            int id,
-            Cliente cliente)
+        [Authorize(Roles = Roles.Administrador)]
+        public async Task<IActionResult> ActualizarCliente(int id, ActualizarClienteDto dto)
         {
-            if (id != cliente.Id)
-            {
-                return BadRequest(new
-                {
-                    mensaje = "El ID de la URL no coincide con el ID del cliente."
-                });
-            }
+            var cliente = await _context.Clientes.FindAsync(id);
 
-            var existente = await _context.Clientes.FindAsync(id);
+            if (cliente == null)
+                return NotFound(new { mensaje = "El cliente no existe." });
 
-            if (existente == null)
-            {
-                return NotFound(new
-                {
-                    mensaje = "El cliente no existe."
-                });
-            }
+            if (EsConsumidorFinal(cliente))
+                return BadRequest(new { mensaje = "El cliente 'Consumidor Final' no se puede modificar." });
 
-            existente.Nombre = cliente.Nombre;
-            existente.Apellido = cliente.Apellido;
-            existente.Telefono = cliente.Telefono;
-            existente.Email = cliente.Email;
-            existente.Direccion = cliente.Direccion;
+            cliente.Nombre = dto.Nombre;
+            cliente.Apellido = dto.Apellido;
+            cliente.Telefono = dto.Telefono;
+            cliente.Email = dto.Email;
+            cliente.Direccion = dto.Direccion;
 
             await _context.SaveChangesAsync();
-
             return NoContent();
         }
 
-        // DELETE: api/clientes/5
-    
+        // DELETE: api/clientes/5  (solo Administrador)
         [HttpDelete("{id}")]
-
+        [Authorize(Roles = Roles.Administrador)]
         public async Task<IActionResult> EliminarCliente(int id)
         {
-            var cliente = await _context.Clientes
-                .Include(c => c.Ventas)
-                .FirstOrDefaultAsync(c => c.Id == id);
+            var cliente = await _context.Clientes.FindAsync(id);
 
             if (cliente == null)
-            {
-                return NotFound(new
-                {
-                    mensaje = "El cliente no existe."
-                });
-            }
+                return NotFound(new { mensaje = "El cliente no existe." });
 
-            if (cliente.Ventas.Any())
-            {
-                return BadRequest(new
-                {
-                    mensaje = "No se puede eliminar el cliente porque tiene ventas asociadas."
-                });
-            }
+            if (EsConsumidorFinal(cliente))
+                return BadRequest(new { mensaje = "El cliente 'Consumidor Final' no se puede eliminar." });
+
             if (cliente.UsuarioId != null)
-            {
-                return BadRequest(new
-                {
-                    mensaje = "No se puede eliminar un cliente asociado a un usuario."
-                });
-            }
+                return BadRequest(new { mensaje = "No se puede eliminar un cliente asociado a un usuario." });
+
+            if (await _context.Ventas.AnyAsync(v => v.ClienteId == id))
+                return BadRequest(new { mensaje = "No se puede eliminar el cliente porque tiene ventas asociadas." });
+
             _context.Clientes.Remove(cliente);
-
             await _context.SaveChangesAsync();
-
             return NoContent();
         }
     }

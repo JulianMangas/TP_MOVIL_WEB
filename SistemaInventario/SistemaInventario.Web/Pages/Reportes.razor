@@ -1,0 +1,124 @@
+﻿@page "/reportes"
+@attribute [Authorize(Roles = "Administrador")]
+@inject HttpClient Http
+@inject IJSRuntime JS
+@inject AuthProvider Auth
+@inject NavigationManager Nav
+
+<PageTitle>Reportes</PageTitle>
+
+<h1 class="h3 mb-3">Reportes en PDF</h1>
+
+@if (error != null)
+{
+    <div class="alert alert-danger">@error</div>
+}
+
+@if (mensajeOk != null)
+{
+    <div class="alert alert-success">@mensajeOk</div>
+}
+
+<div class="row g-3">
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body">
+                <h5 class="card-title">Reporte diario</h5>
+                <p class="card-text small text-muted">
+                    Ventas (salidas), ingresos de mercadería (entradas) y stock actual del día elegido.
+                </p>
+                <label class="form-label">Fecha</label>
+                <input type="date" class="form-control mb-3" @bind="fecha" />
+                <button class="btn btn-primary w-100" disabled="@(descargando != null)"
+                        @onclick="DescargarDiario">
+                    @(descargando == "diario" ? "Generando..." : "Descargar PDF")
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body d-flex flex-column">
+                <h5 class="card-title">Auditoría</h5>
+                <p class="card-text small text-muted">
+                    Últimos 200 registros de actividad: quién hizo qué y cuándo.
+                </p>
+                <button class="btn btn-primary w-100 mt-auto" disabled="@(descargando != null)"
+                        @onclick='() => DescargarAsync("api/Reportes/auditoria", "auditoria")'>
+                    @(descargando == "auditoria" ? "Generando..." : "Descargar PDF")
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body d-flex flex-column">
+                <h5 class="card-title">Registro de errores</h5>
+                <p class="card-text small text-muted">
+                    Últimos 100 errores del sistema, con ruta, mensaje y detalle técnico.
+                </p>
+                <button class="btn btn-primary w-100 mt-auto" disabled="@(descargando != null)"
+                        @onclick='() => DescargarAsync("api/Reportes/errores", "errores")'>
+                    @(descargando == "errores" ? "Generando..." : "Descargar PDF")
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private DateTime fecha = DateTime.Today;
+    private string? descargando;
+    private string? error;
+    private string? mensajeOk;
+
+    private Task DescargarDiario() =>
+        DescargarAsync($"api/Reportes/diario?fecha={fecha:yyyy-MM-dd}", "diario");
+
+    private async Task DescargarAsync(string url, string clave)
+    {
+        error = null;
+        mensajeOk = null;
+        descargando = clave;
+
+        try
+        {
+            var r = await Http.GetAsync(url);
+
+            if (r.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                await Auth.CerrarSesionAsync();
+                Nav.NavigateTo("login");
+                return;
+            }
+
+            if (!r.IsSuccessStatusCode)
+            {
+                error = r.StatusCode == System.Net.HttpStatusCode.Forbidden
+                    ? "No tenés permiso para descargar este reporte."
+                    : "No se pudo generar el reporte.";
+                return;
+            }
+
+            var bytes = await r.Content.ReadAsByteArrayAsync();
+            var nombre = r.Content.Headers.ContentDisposition?.FileNameStar
+                         ?? r.Content.Headers.ContentDisposition?.FileName?.Trim('"')
+                         ?? $"reporte-{clave}.pdf";
+
+            await JS.InvokeVoidAsync("descargarArchivo", nombre, "application/pdf",
+                                     Convert.ToBase64String(bytes));
+
+            mensajeOk = $"Reporte descargado: {nombre}";
+        }
+        catch (HttpRequestException)
+        {
+            error = "No se pudo conectar con el servidor.";
+        }
+        finally
+        {
+            descargando = null;
+        }
+    }
+}

@@ -1,0 +1,68 @@
+﻿@inject AuthProvider Auth
+@inject NavigationManager Nav
+
+<nav class="navbar navbar-dark bg-dark px-3">
+    <a class="navbar-brand" href="">Sistema Inventario</a>
+    <button title="Menú" class="navbar-toggler" @onclick="CambiarMenu">
+        <span class="navbar-toggler-icon"></span>
+    </button>
+</nav>
+
+<div class="@ClaseMenu bg-dark text-white pb-3" @onclick="CambiarMenu">
+    <ul class="nav flex-column px-2">
+        <AuthorizeView>
+            <Authorized>
+                <li class="nav-item px-2 pt-2 pb-1 text-white-50">
+                    Hola, @(context.User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value ?? "usuario")
+                </li>
+                <li class="nav-item">
+                    <NavLink class="nav-link text-white" href="" Match="NavLinkMatch.All">Inicio</NavLink>
+                </li>
+            </Authorized>
+            <NotAuthorized>
+                <li class="nav-item">
+                    <NavLink class="nav-link text-white" href="login">Iniciar sesión</NavLink>
+                </li>
+            </NotAuthorized>
+        </AuthorizeView>
+
+        <AuthorizeView Roles="Cajero,Administrador">
+            <li class="nav-item">
+                <NavLink class="nav-link text-white" href="pos">Punto de venta</NavLink>
+            </li>
+        </AuthorizeView>
+
+        <AuthorizeView Roles="Administrador">
+            <li class="nav-item">
+                <NavLink class="nav-link text-white" href="ingresos">Ingreso de mercadería</NavLink>
+            </li>
+            <li class="nav-item">
+                <NavLink class="nav-link text-white" href="reportes">Reportes</NavLink>
+            </li>
+            <li class="nav-item">
+                <NavLink class="nav-link text-white" href="usuarios">Usuarios</NavLink>
+            </li>
+        </AuthorizeView>
+
+        <AuthorizeView>
+            <li class="nav-item px-2 pt-3">
+                <button class="btn btn-outline-light btn-sm" @onclick="CerrarSesion">
+                    Cerrar sesión
+                </button>
+            </li>
+        </AuthorizeView>
+    </ul>
+</div>
+
+@code {
+    private bool menuAbierto = true;
+    private string? ClaseMenu => menuAbierto ? null : "collapse";
+
+    private void CambiarMenu() => menuAbierto = !menuAbierto;
+
+    private async Task CerrarSesion()
+    {
+        await Auth.CerrarSesionAsync();
+        Nav.NavigateTo("login");
+    }
+}

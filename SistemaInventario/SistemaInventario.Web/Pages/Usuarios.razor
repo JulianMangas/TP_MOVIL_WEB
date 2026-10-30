@@ -1,0 +1,194 @@
+﻿@page "/usuarios"
+@attribute [Authorize(Roles = "Administrador")]
+@inject HttpClient Http
+@inject AuthProvider Auth
+@inject NavigationManager Nav
+
+<PageTitle>Usuarios</PageTitle>
+
+<h1 class="h3 mb-3">Gestión de usuarios</h1>
+
+@if (error != null)
+{
+    <div class="alert alert-danger">@error</div>
+}
+
+@if (mensajeOk != null)
+{
+    <div class="alert alert-success">@mensajeOk</div>
+}
+
+<div class="input-group mb-3" style="max-width:420px">
+    <input class="form-control" placeholder="Buscar por nombre o email..."
+           @bind="busqueda" @bind:event="oninput" @onkeydown="Tecla" />
+    <button class="btn btn-primary" @onclick="CargarAsync">Buscar</button>
+</div>
+
+@if (cargando)
+{
+    <p>Cargando...</p>
+}
+else if (usuarios.Count == 0)
+{
+    <p class="text-muted">No se encontraron usuarios.</p>
+}
+else
+{
+    <table class="table align-middle">
+        <thead>
+            <tr>
+                <th>Nombre</th>
+                <th>Email</th>
+                <th>Rol actual</th>
+                <th>Cambiar a</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var u in usuarios)
+            {
+                <tr>
+                    <td>@u.Nombre</td>
+                    <td>@u.Email</td>
+                    <td><span class="badge bg-secondary">@u.Rol</span></td>
+                    <td>
+                        <select class="form-select form-select-sm" style="max-width:180px"
+                                value="@u.Rol"
+                                @onchange="e => CambiarRolAsync(u, e.Value?.ToString())">
+                            @foreach (var r in roles)
+                            {
+                                <option value="@r">@r</option>
+                            }
+                        </select>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    <div class="d-flex align-items-center gap-2">
+        <button class="btn btn-outline-secondary btn-sm" disabled="@(pagina <= 1)"
+                @onclick="Anterior">Anterior</button>
+        <span>Página @pagina de @totalPaginas</span>
+        <button class="btn btn-outline-secondary btn-sm" disabled="@(pagina >= totalPaginas)"
+                @onclick="Siguiente">Siguiente</button>
+    </div>
+}
+
+<p class="text-muted small mt-3">
+    El cambio de rol se aplica la próxima vez que el usuario inicie sesión.
+</p>
+
+@code {
+    private static readonly string[] roles = { "Administrador", "Cajero", "Usuario" };
+
+    private List<UsuarioDto> usuarios = new();
+    private string busqueda = "";
+    private int pagina = 1;
+    private int totalPaginas = 1;
+    private bool cargando;
+    private string? error;
+    private string? mensajeOk;
+
+    protected override async Task OnInitializedAsync() => await CargarAsync();
+
+    private async Task Tecla(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") { pagina = 1; await CargarAsync(); }
+    }
+
+    private async Task Anterior() { pagina--; await CargarAsync(); }
+    private async Task Siguiente() { pagina++; await CargarAsync(); }
+
+    private async Task CargarAsync()
+    {
+        cargando = true;
+        error = null;
+
+        try
+        {
+            var url = $"api/Usuarios?page={pagina}&pageSize=10";
+            if (!string.IsNullOrWhiteSpace(busqueda))
+                url += "&buscar=" + Uri.EscapeDataString(busqueda.Trim());
+
+            var r = await Http.GetAsync(url);
+
+            if (await SesionVencidaAsync(r)) return;
+
+            if (r.IsSuccessStatusCode)
+            {
+                var datos = await r.Content.ReadFromJsonAsync<RespuestaPaginada<UsuarioDto>>();
+                usuarios = datos?.Datos ?? new();
+                totalPaginas = Math.Max(1, datos?.TotalPaginas ?? 1);
+            }
+            else
+            {
+                error = await LeerErrorAsync(r);
+            }
+        }
+        catch (HttpRequestException)
+        {
+            error = "No se pudo conectar con el servidor.";
+        }
+        finally
+        {
+            cargando = false;
+        }
+    }
+
+    private async Task CambiarRolAsync(UsuarioDto u, string? nuevoRol)
+    {
+        error = null;
+        mensajeOk = null;
+
+        if (string.IsNullOrEmpty(nuevoRol) || nuevoRol == u.Rol) return;
+
+        try
+        {
+            var r = await Http.PutAsJsonAsync($"api/Usuarios/{u.Id}/rol",
+                                              new CambiarRolRequest { Rol = nuevoRol });
+
+            if (await SesionVencidaAsync(r)) return;
+
+            if (r.IsSuccessStatusCode)
+            {
+                mensajeOk = $"{u.Nombre} ahora es {nuevoRol}.";
+            }
+            else
+            {
+                error = await LeerErrorAsync(r);
+            }
+        }
+        catch (HttpRequestException)
+        {
+            error = "No se pudo conectar con el servidor.";
+        }
+
+        await CargarAsync();   // refresca (y deja el rol real si hubo error)
+    }
+
+    private async Task<bool> SesionVencidaAsync(HttpResponseMessage r)
+    {
+        if (r.StatusCode != System.Net.HttpStatusCode.Unauthorized) return false;
+
+        await Auth.CerrarSesionAsync();
+        Nav.NavigateTo("login");
+        return true;
+    }
+
+    private static async Task<string> LeerErrorAsync(HttpResponseMessage r)
+    {
+        try
+        {
+            var e = await r.Content.ReadFromJsonAsync<ErrorApi>();
+            if (!string.IsNullOrWhiteSpace(e?.Mensaje)) return e.Mensaje;
+        }
+        catch { }
+
+        return r.StatusCode switch
+        {
+            System.Net.HttpStatusCode.Forbidden => "No tenés permiso para realizar esta acción.",
+            System.Net.HttpStatusCode.BadRequest => "Los datos enviados no son válidos.",
+            _ => "Ocurrió un error inesperado."
+        };
+    }
+}

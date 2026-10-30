@@ -1,0 +1,72 @@
+﻿@page "/login"
+@inject HttpClient Http
+@inject AuthProvider Auth
+@inject NavigationManager Nav
+
+<PageTitle>Iniciar sesión</PageTitle>
+
+<div class="row justify-content-center mt-5">
+    <div class="col-md-4">
+        <h1 class="h3 mb-4">Iniciar sesión</h1>
+
+        <EditForm Model="modelo" OnValidSubmit="IniciarAsync">
+            <DataAnnotationsValidator />
+
+            <div class="mb-3">
+                <label class="form-label">Email</label>
+                <InputText class="form-control" @bind-Value="modelo.Email" />
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Contraseña</label>
+                <InputText type="password" class="form-control" @bind-Value="modelo.Password" />
+            </div>
+
+            @if (error != null)
+            {
+                <div class="alert alert-danger">@error</div>
+            }
+
+            <button class="btn btn-primary w-100" disabled="@cargando">
+                @(cargando ? "Ingresando..." : "Ingresar")
+            </button>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    private readonly LoginRequest modelo = new();
+    private string? error;
+    private bool cargando;
+
+    private async Task IniciarAsync()
+    {
+        error = null;
+        cargando = true;
+
+        try
+        {
+            var respuesta = await Http.PostAsJsonAsync("api/Auth/login", modelo);
+
+            if (respuesta.IsSuccessStatusCode)
+            {
+                var datos = await respuesta.Content.ReadFromJsonAsync<LoginRespuesta>();
+                await Auth.IniciarSesionAsync(datos!.Token);
+                Nav.NavigateTo("/");
+            }
+            else
+            {
+                var e = await respuesta.Content.ReadFromJsonAsync<ErrorApi>();
+                error = e?.Mensaje ?? "No se pudo iniciar sesión.";
+            }
+        }
+        catch (HttpRequestException)
+        {
+            error = "No se pudo conectar con el servidor. ¿Está corriendo la API?";
+        }
+        finally
+        {
+            cargando = false;
+        }
+    }
+}

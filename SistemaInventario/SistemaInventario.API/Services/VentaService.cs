@@ -4,6 +4,7 @@ using SistemaInventario.API.Data;
 using SistemaInventario.API.DTOs.Paginacion;
 using SistemaInventario.API.DTOs.Venta;
 using SistemaInventario.API.Exceptions;
+using SistemaInventario.API.Helpers;
 using SistemaInventario.API.Models;
 
 namespace SistemaInventario.API.Services
@@ -19,7 +20,6 @@ namespace SistemaInventario.API.Services
             _auditoria = auditoria;
         }
 
-        // La proyección a DTO
         private static readonly Expression<Func<Venta, VentaDto>> AVentaDto = v => new VentaDto
         {
             Id = v.Id,
@@ -28,14 +28,14 @@ namespace SistemaInventario.API.Services
             ClienteNombre = v.Cliente != null
                 ? v.Cliente.Nombre + " " + v.Cliente.Apellido
                 : null,
-
+            UsuarioId = v.UsuarioId,
+            CajeroNombre = v.Usuario != null ? v.Usuario.Nombre : null,
+            Total = v.Detalles.Sum(d => d.Cantidad * d.PrecioVenta),
             Detalles = v.Detalles.Select(d => new DetalleVentaDto
             {
                 Id = d.Id,
                 ProductoId = d.ProductoId,
-                ProductoNombre = d.Producto != null
-                    ? d.Producto.Nombre
-                    : null,
+                ProductoNombre = d.Producto != null ? d.Producto.Nombre : null,
                 Cantidad = d.Cantidad,
                 PrecioVenta = d.PrecioVenta
             }).ToList()
@@ -54,7 +54,7 @@ namespace SistemaInventario.API.Services
             var totalRegistros = await query.CountAsync();
 
             var ventas = await query
-                .OrderBy(v => v.Id)
+                .OrderByDescending(v => v.Id)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
                 .Select(AVentaDto)
@@ -80,20 +80,37 @@ namespace SistemaInventario.API.Services
 
         public async Task<VentaDto> CrearAsync(CrearVentaDto dto, int usuarioId)
         {
-            var cliente = await _context.Clientes
-                .FirstOrDefaultAsync(c => c.UsuarioId == usuarioId);
+            Cliente? cliente;
 
-            if (cliente == null)
+            if (dto.ClienteId.HasValue)
             {
-                throw new ReglaDeNegocioException(
-                    "Tu usuario no tiene un cliente asociado, no puede realizar compras.");
+                cliente = await _context.Clientes
+                    .FirstOrDefaultAsync(c => c.Id == dto.ClienteId.Value);
+
+                if (cliente == null)
+                {
+                    throw new ReglaDeNegocioException("El cliente indicado no existe.");
+                }
+            }
+            else
+            {
+                cliente = await _context.Clientes.FirstOrDefaultAsync(c =>
+                    c.UsuarioId == null &&
+                    c.Nombre == ConsumidorFinal.Nombre &&
+                    c.Apellido == ConsumidorFinal.Apellido);
+
+                if (cliente == null)
+                {
+                    throw new ReglaDeNegocioException(
+                        "No está configurado el cliente 'Consumidor Final'.");
+                }
             }
 
             var venta = new Venta
             {
                 ClienteId = cliente.Id,
                 UsuarioId = usuarioId,
-                Fecha = DateTime.Now
+                Fecha = Hora.Ahora
             };
 
             foreach (var detalleDto in dto.Detalles)
@@ -126,10 +143,11 @@ namespace SistemaInventario.API.Services
             }
 
             _context.Ventas.Add(venta);
-
             await _context.SaveChangesAsync();
+
             await _auditoria.RegistrarAsync("CREAR", "Venta", venta.Id, usuarioId,
-            $"Venta de {venta.Detalles.Count} producto(s)");
+                $"Venta de {venta.Detalles.Count} producto(s) a {cliente.Nombre} {cliente.Apellido}");
+
             return await _context.Ventas
                 .Where(v => v.Id == venta.Id)
                 .Select(AVentaDto)

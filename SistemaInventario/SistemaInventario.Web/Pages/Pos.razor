@@ -1,0 +1,422 @@
+﻿@page "/pos"
+@attribute [Authorize(Roles = "Cajero,Administrador")]
+@using System.Globalization
+@inject HttpClient Http
+@inject AuthProvider Auth
+@inject NavigationManager Nav
+
+<PageTitle>Punto de venta</PageTitle>
+
+<h1 class="h3 mb-3">Punto de venta</h1>
+
+@if (ultimaVenta != null)
+{
+    <div class="alert alert-success">
+        <h5 class="alert-heading">Venta #@ultimaVenta.Id registrada</h5>
+        <p class="mb-1">
+            Cliente: <strong>@ultimaVenta.ClienteNombre</strong> |
+            Cajero: <strong>@ultimaVenta.CajeroNombre</strong> |
+            @ultimaVenta.Fecha.ToString("dd/MM/yyyy HH:mm")
+        </p>
+        <ul class="mb-2">
+            @foreach (var d in ultimaVenta.Detalles)
+            {
+                <li>@d.Cantidad x @d.ProductoNombre — $ @Dinero(d.Cantidad * d.PrecioVenta)</li>
+            }
+        </ul>
+        <p class="fs-5 mb-2">Total: <strong>$ @Dinero(ultimaVenta.Total)</strong></p>
+        <button class="btn btn-success btn-sm" @onclick="() => ultimaVenta = null">Nueva venta</button>
+    </div>
+}
+
+@if (error != null)
+{
+    <div class="alert alert-danger">@error</div>
+}
+
+<div class="row">
+    <!-- PRODUCTOS -->
+    <div class="col-lg-7 mb-4">
+        <div class="input-group mb-3">
+            <input class="form-control" placeholder="Buscar producto..."
+                   @bind="busquedaProducto" @bind:event="oninput"
+                   @onkeydown="TeclaBuscarProducto" />
+            <button class="btn btn-primary" @onclick="BuscarProductosAsync">Buscar</button>
+        </div>
+
+        @if (cargandoProductos)
+        {
+            <p>Cargando productos...</p>
+        }
+        else if (productos.Count == 0)
+        {
+            <p class="text-muted">No hay productos para mostrar.</p>
+        }
+        else
+        {
+            <div class="row row-cols-1 row-cols-md-2 g-3">
+                @foreach (var p in productos)
+                {
+                    <div class="col">
+                        <div class="card h-100">
+                            <div class="card-body">
+                                <h6 class="card-title">@p.Nombre</h6>
+                                <p class="card-text text-muted small mb-1">@p.CategoriaNombre</p>
+                                <p class="card-text fs-5 mb-1">$ @Dinero(p.Precio)</p>
+                                <span class="badge @(p.Stock > 0 ? "bg-success" : "bg-danger")">
+                                    Stock: @p.Stock
+                                </span>
+                            </div>
+                            <div class="card-footer bg-transparent">
+                                <button class="btn btn-outline-primary btn-sm w-100"
+                                        disabled="@(p.Stock <= 0)"
+                                        @onclick="() => Agregar(p)">
+                                    Agregar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+
+    <!-- CARRITO -->
+    <div class="col-lg-5">
+        <div class="card">
+            <div class="card-header"><strong>Cliente</strong></div>
+            <div class="card-body">
+                <p class="mb-2">
+                    @if (clienteSeleccionado == null)
+                    {
+                        <span class="badge bg-secondary">Consumidor Final</span>
+                    }
+                    else
+                    {
+                        <span class="badge bg-info text-dark">
+                            @clienteSeleccionado.Nombre @clienteSeleccionado.Apellido
+                        </span>
+                        <button class="btn btn-link btn-sm" @onclick="QuitarCliente">
+                            Volver a Consumidor Final
+                        </button>
+                    }
+                </p>
+
+                <div class="input-group input-group-sm">
+                    <input class="form-control" placeholder="Buscar otro cliente..."
+                           @bind="busquedaCliente" @bind:event="oninput"
+                           @onkeydown="TeclaBuscarCliente" />
+                    <button class="btn btn-outline-secondary" @onclick="BuscarClientesAsync">Buscar</button>
+                </div>
+
+                @if (clientesEncontrados.Count > 0)
+                {
+                    <div class="list-group mt-2">
+                        @foreach (var c in clientesEncontrados)
+                        {
+                            <button class="list-group-item list-group-item-action"
+                                    @onclick="() => ElegirCliente(c)">
+                                @c.Nombre @c.Apellido
+                                @if (!string.IsNullOrEmpty(c.Email))
+                                {
+                                    <small class="text-muted"> — @c.Email</small>
+                                }
+                            </button>
+                        }
+                    </div>
+                }
+                else if (clienteBuscado)
+                {
+                    <p class="text-muted small mt-2 mb-0">No se encontraron clientes.</p>
+                }
+            </div>
+        </div>
+
+        <div class="card mt-3">
+            <div class="card-header"><strong>Carrito</strong></div>
+            <div class="card-body">
+                @if (carrito.Count == 0)
+                {
+                    <p class="text-muted mb-0">El carrito está vacío.</p>
+                }
+                else
+                {
+                    <table class="table table-sm align-middle">
+                        <thead>
+                            <tr>
+                                <th>Producto</th>
+                                <th class="text-center">Cant.</th>
+                                <th class="text-end">Subtotal</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in carrito)
+                            {
+                                <tr>
+                                    <td>@item.Producto.Nombre</td>
+                                    <td class="text-center text-nowrap">
+                                        <button class="btn btn-outline-secondary btn-sm"
+                                                @onclick="() => Restar(item)">−</button>
+                                        <span class="mx-1">@item.Cantidad</span>
+                                        <button class="btn btn-outline-secondary btn-sm"
+                                                disabled="@(item.Cantidad >= item.Producto.Stock)"
+                                                @onclick="() => Sumar(item)">+</button>
+                                    </td>
+                                    <td class="text-end">$ @Dinero(item.Cantidad * item.Producto.Precio)</td>
+                                    <td>
+                                        <button class="btn btn-outline-danger btn-sm"
+                                                @onclick="() => Quitar(item)">✕</button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+
+                    <p class="fs-4 text-end mb-3">Total: <strong>$ @Dinero(Total)</strong></p>
+
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-success" disabled="@confirmando" @onclick="ConfirmarVentaAsync">
+                            @(confirmando ? "Registrando..." : "Confirmar venta")
+                        </button>
+                        <button class="btn btn-outline-secondary btn-sm" @onclick="Vaciar">
+                            Vaciar carrito
+                        </button>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private static readonly CultureInfo Es = new("es-AR");
+
+    private class ItemCarrito
+    {
+        public ProductoDto Producto { get; set; } = new();
+        public int Cantidad { get; set; }
+    }
+
+    private List<ProductoDto> productos = new();
+    private List<ItemCarrito> carrito = new();
+    private List<ClienteDto> clientesEncontrados = new();
+    private ClienteDto? clienteSeleccionado;
+    private VentaRespuesta? ultimaVenta;
+
+    private string busquedaProducto = "";
+    private string busquedaCliente = "";
+    private string? error;
+    private bool cargandoProductos;
+    private bool confirmando;
+    private bool clienteBuscado;
+
+    private decimal Total => carrito.Sum(i => i.Cantidad * i.Producto.Precio);
+
+    private string Dinero(decimal valor) => valor.ToString("N2", Es);
+
+    protected override async Task OnInitializedAsync() => await BuscarProductosAsync();
+
+    // ---------- Productos ----------
+
+    private async Task TeclaBuscarProducto(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await BuscarProductosAsync();
+    }
+
+    private async Task BuscarProductosAsync()
+    {
+        cargandoProductos = true;
+        error = null;
+
+        try
+        {
+            var url = "api/Productos?page=1&pageSize=24";
+            if (!string.IsNullOrWhiteSpace(busquedaProducto))
+                url += "&buscar=" + Uri.EscapeDataString(busquedaProducto.Trim());
+
+            var r = await Http.GetAsync(url);
+
+            if (await SesionVencidaAsync(r)) return;
+
+            if (r.IsSuccessStatusCode)
+            {
+                var datos = await r.Content.ReadFromJsonAsync<RespuestaPaginada<ProductoDto>>();
+                productos = datos?.Datos ?? new();
+            }
+            else
+            {
+                error = await LeerErrorAsync(r);
+            }
+        }
+        catch (HttpRequestException)
+        {
+            error = "No se pudo conectar con el servidor.";
+        }
+        finally
+        {
+            cargandoProductos = false;
+        }
+    }
+
+    // ---------- Carrito ----------
+
+    private void Agregar(ProductoDto p)
+    {
+        var existente = carrito.FirstOrDefault(i => i.Producto.Id == p.Id);
+
+        if (existente == null)
+            carrito.Add(new ItemCarrito { Producto = p, Cantidad = 1 });
+        else if (existente.Cantidad < p.Stock)
+            existente.Cantidad++;
+    }
+
+    private void Sumar(ItemCarrito i)
+    {
+        if (i.Cantidad < i.Producto.Stock) i.Cantidad++;
+    }
+
+    private void Restar(ItemCarrito i)
+    {
+        if (i.Cantidad > 1) i.Cantidad--;
+        else carrito.Remove(i);
+    }
+
+    private void Quitar(ItemCarrito i) => carrito.Remove(i);
+
+    private void Vaciar() => carrito.Clear();
+
+    // ---------- Clientes ----------
+
+    private async Task TeclaBuscarCliente(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await BuscarClientesAsync();
+    }
+
+    private async Task BuscarClientesAsync()
+    {
+        error = null;
+
+        if (string.IsNullOrWhiteSpace(busquedaCliente))
+        {
+            clientesEncontrados.Clear();
+            clienteBuscado = false;
+            return;
+        }
+
+        try
+        {
+            var url = "api/Clientes?page=1&pageSize=8&buscar=" +
+                      Uri.EscapeDataString(busquedaCliente.Trim());
+
+            var r = await Http.GetAsync(url);
+
+            if (await SesionVencidaAsync(r)) return;
+
+            if (r.IsSuccessStatusCode)
+            {
+                var datos = await r.Content.ReadFromJsonAsync<RespuestaPaginada<ClienteDto>>();
+                clientesEncontrados = datos?.Datos ?? new();
+                clienteBuscado = true;
+            }
+            else
+            {
+                error = await LeerErrorAsync(r);
+            }
+        }
+        catch (HttpRequestException)
+        {
+            error = "No se pudo conectar con el servidor.";
+        }
+    }
+
+    private void ElegirCliente(ClienteDto c)
+    {
+        clienteSeleccionado = c;
+        clientesEncontrados.Clear();
+        clienteBuscado = false;
+        busquedaCliente = "";
+    }
+
+    private void QuitarCliente() => clienteSeleccionado = null;
+
+    // ---------- Confirmar venta ----------
+
+    private async Task ConfirmarVentaAsync()
+    {
+        if (carrito.Count == 0) return;
+
+        error = null;
+        confirmando = true;
+
+        try
+        {
+            var pedido = new CrearVentaRequest
+            {
+                ClienteId = clienteSeleccionado?.Id,
+                Detalles = carrito
+                    .Select(i => new DetalleVentaRequest
+                    {
+                        ProductoId = i.Producto.Id,
+                        Cantidad = i.Cantidad
+                    })
+                    .ToList()
+            };
+
+            var r = await Http.PostAsJsonAsync("api/Ventas", pedido);
+
+            if (await SesionVencidaAsync(r)) return;
+
+            if (r.IsSuccessStatusCode)
+            {
+                ultimaVenta = await r.Content.ReadFromJsonAsync<VentaRespuesta>();
+                carrito.Clear();
+                clienteSeleccionado = null;
+                await BuscarProductosAsync();   // refresca el stock
+            }
+            else
+            {
+                error = await LeerErrorAsync(r);
+            }
+        }
+        catch (HttpRequestException)
+        {
+            error = "No se pudo conectar con el servidor.";
+        }
+        finally
+        {
+            confirmando = false;
+        }
+    }
+
+    // ---------- Utilidades ----------
+
+    private async Task<bool> SesionVencidaAsync(HttpResponseMessage r)
+    {
+        if (r.StatusCode != System.Net.HttpStatusCode.Unauthorized) return false;
+
+        await Auth.CerrarSesionAsync();
+        Nav.NavigateTo("login");
+        return true;
+    }
+
+    private static async Task<string> LeerErrorAsync(HttpResponseMessage r)
+    {
+        try
+        {
+            var e = await r.Content.ReadFromJsonAsync<ErrorApi>();
+            if (!string.IsNullOrWhiteSpace(e?.Mensaje)) return e.Mensaje;
+        }
+        catch
+        {
+            // la respuesta no tenía el formato esperado
+        }
+
+        return r.StatusCode switch
+        {
+            System.Net.HttpStatusCode.Forbidden => "No tenés permiso para realizar esta acción.",
+            System.Net.HttpStatusCode.BadRequest => "Los datos enviados no son válidos.",
+            _ => "Ocurrió un error inesperado."
+        };
+    }
+}

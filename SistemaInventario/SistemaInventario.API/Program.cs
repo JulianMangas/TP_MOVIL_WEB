@@ -17,7 +17,8 @@ builder.Services.AddCors(options =>
         policy
             .AllowAnyOrigin()
             .AllowAnyMethod()
-            .AllowAnyHeader();
+            .AllowAnyHeader()
+            .WithExposedHeaders("Content-Disposition");
     });
 });
 // Add services to the container.
@@ -160,6 +161,27 @@ using (var scope = app.Services.CreateScope())
             Email = "cliente@inventario.com",
             PasswordHash = BCrypt.Net.BCrypt.HashPassword("Cliente123!"),
             Rol = "Usuario"
+        });
+    }
+    if (!db.Clientes.Any(c => c.UsuarioId == null
+        && c.Nombre == ConsumidorFinal.Nombre
+        && c.Apellido == ConsumidorFinal.Apellido))
+    {
+        db.Clientes.Add(new Cliente
+        {
+            Nombre = ConsumidorFinal.Nombre,
+            Apellido = ConsumidorFinal.Apellido
+        });
+    }
+
+    if (!db.Usuarios.Any(u => u.Email == "cajero@inventario.com"))
+    {
+        db.Usuarios.Add(new Usuario
+        {
+            Nombre = "Cajero Demo",
+            Email = "cajero@inventario.com",
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword("Cajero123!"),
+            Rol = Roles.Cajero
         });
     }
 

@@ -4,6 +4,7 @@
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>ce85da69-5da9-488c-a29e-f80dfcba30ad</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
@@ -23,7 +24,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Helpers\" />
     <Folder Include="wwwroot\uploads\productos\" />
   </ItemGroup>
 
